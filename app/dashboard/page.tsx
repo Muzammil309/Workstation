@@ -22,7 +22,10 @@ export default function DashboardPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false) // New state for collapsed sidebar
   const { user, isLoading } = useAuth()
 
+  console.log('🔍 DashboardPage: Render with user:', user, 'isLoading:', isLoading)
+
   if (isLoading) {
+    console.log('🔍 DashboardPage: Showing loading spinner')
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-neon-blue"></div>
@@ -31,9 +34,12 @@ export default function DashboardPage() {
   }
 
   if (!user) {
+    console.log('🔍 DashboardPage: No user, returning null')
     // Redirect to login would happen here
     return null
   }
+
+  console.log('🔍 DashboardPage: User authenticated, rendering dashboard')
 
   const renderContent = () => {
     switch (activeTab) {

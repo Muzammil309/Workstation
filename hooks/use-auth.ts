@@ -20,9 +20,12 @@ export function useAuth() {
     // Check if user is already authenticated with Supabase
     const checkAuth = async () => {
       try {
+        console.log('🔍 useAuth: Starting auth check...')
         const { data: { session } } = await supabase.auth.getSession()
+        console.log('🔍 useAuth: Session check result:', { session: !!session, userId: session?.user?.id })
         
         if (session) {
+          console.log('🔍 useAuth: Session found, checking users table...')
           // Get user details from database
           const { data: userData, error } = await supabase
             .from('users')
@@ -30,9 +33,15 @@ export function useAuth() {
             .eq('id', session.user.id)
             .single()
             
-          if (error) throw error
+          console.log('🔍 useAuth: Users table query result:', { userData, error })
+          
+          if (error) {
+            console.error('❌ useAuth: Error fetching user from users table:', error)
+            throw error
+          }
           
           if (userData) {
+            console.log('✅ useAuth: User data found, formatting user...')
             const formattedUser: User = {
               id: userData.id,
               email: userData.email,
@@ -41,12 +50,18 @@ export function useAuth() {
               lastName: userData.name?.split(' ').slice(1).join(' '),
               role: userData.role as 'user' | 'admin'
             }
+            console.log('✅ useAuth: Setting user:', formattedUser)
             setUser(formattedUser)
+          } else {
+            console.log('⚠️ useAuth: No user data found in users table')
           }
+        } else {
+          console.log('🔍 useAuth: No session found')
         }
       } catch (error) {
-        console.error('Auth check failed:', error)
+        console.error('❌ useAuth: Auth check failed:', error)
       } finally {
+        console.log('🔍 useAuth: Setting isLoading to false')
         setIsLoading(false)
       }
     }
@@ -56,7 +71,10 @@ export function useAuth() {
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('🔍 useAuth: Auth state change event:', event, 'Session:', !!session)
+        
         if (event === 'SIGNED_IN' && session) {
+          console.log('🔍 useAuth: SIGNED_IN event, getting user details from database...')
           // Get user details from database when they sign in
           const { data: userData, error } = await supabase
             .from('users')
@@ -64,7 +82,10 @@ export function useAuth() {
             .eq('id', session.user.id)
             .single()
             
+          console.log('🔍 useAuth: Database query result for SIGNED_IN:', { userData, error })
+          
           if (!error && userData) {
+            console.log('✅ useAuth: User data found for SIGNED_IN, formatting...')
             const formattedUser: User = {
               id: userData.id,
               email: userData.email,
@@ -73,9 +94,13 @@ export function useAuth() {
               lastName: userData.name?.split(' ').slice(1).join(' '),
               role: userData.role as 'user' | 'admin'
             }
+            console.log('✅ useAuth: Setting user from SIGNED_IN event:', formattedUser)
             setUser(formattedUser)
+          } else {
+            console.error('❌ useAuth: Error getting user data for SIGNED_IN:', error)
           }
         } else if (event === 'SIGNED_OUT') {
+          console.log('🔍 useAuth: SIGNED_OUT event, clearing user')
           setUser(null)
         }
       }
@@ -88,16 +113,24 @@ export function useAuth() {
 
   const login = async (email: string, password: string) => {
     try {
+      console.log('🔍 useAuth.login: Starting login process for:', email)
+      
       // First, check if user exists in our users table
+      console.log('🔍 useAuth.login: Checking users table...')
       const { data: userCheck, error: userCheckError } = await supabase
         .from('users')
         .select('*')
         .eq('email', email)
         .single()
       
+      console.log('🔍 useAuth.login: Users table check result:', { userCheck, userCheckError })
+      
       if (userCheckError || !userCheck) {
+        console.error('❌ useAuth.login: User not found in users table:', userCheckError)
         throw new Error('User not found. Please contact your administrator.')
       }
+      
+      console.log('✅ useAuth.login: User found in users table, attempting Supabase auth...')
       
       // Now attempt to authenticate with Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -105,7 +138,10 @@ export function useAuth() {
         password
       })
       
+      console.log('🔍 useAuth.login: Supabase auth result:', { data, error })
+      
       if (error) {
+        console.error('❌ useAuth.login: Supabase auth error:', error)
         // Provide more specific error messages
         if (error.message.includes('Invalid login credentials')) {
           throw new Error('Invalid email or password')
@@ -117,11 +153,16 @@ export function useAuth() {
       }
       
       if (data.user) {
+        console.log('✅ useAuth.login: Supabase auth successful, user ID:', data.user.id)
+        console.log('🔍 useAuth.login: Comparing user IDs - Supabase:', data.user.id, 'Users table:', userCheck.id)
+        
         // Verify the user ID matches between auth and our users table
         if (data.user.id !== userCheck.id) {
+          console.error('❌ useAuth.login: User ID mismatch!')
           throw new Error('User account mismatch. Please contact your administrator.')
         }
         
+        console.log('✅ useAuth.login: User IDs match, formatting user...')
         const formattedUser: User = {
           id: userCheck.id,
           email: userCheck.email,
@@ -130,13 +171,15 @@ export function useAuth() {
           lastName: userCheck.name?.split(' ').slice(1).join(' '),
           role: userCheck.role as 'user' | 'admin'
         }
+        console.log('✅ useAuth.login: Setting user in state:', formattedUser)
         setUser(formattedUser)
         return formattedUser
       }
       
+      console.error('❌ useAuth.login: No user data returned from Supabase')
       throw new Error('Authentication failed. Please try again.')
     } catch (error: any) {
-      console.error('Login failed:', error)
+      console.error('❌ useAuth.login: Login failed:', error)
       throw error
     }
   }
