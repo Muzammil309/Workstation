@@ -33,55 +33,106 @@ export function LoginForm() {
         return
       }
 
-      console.log('🔍 Login attempt for:', email)
+      console.log('🔍 Login attempt starting for:', email)
+      console.log('🔍 Password length:', password.length)
       
-      // Try login with Supabase directly first
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        })
-        
-        if (error) {
-          console.error('❌ Supabase auth error:', error)
-          throw error
-        }
-        
-        if (data.user) {
-          console.log('✅ Supabase auth successful, user ID:', data.user.id)
-          toast({ title: 'Success!', description: 'Welcome back to TaskFlow!' })
-          
-          // Force navigation to dashboard
-          window.location.href = '/dashboard'
-          return
-        }
-      } catch (supabaseErr) {
-        console.error('Direct Supabase login failed, trying normal login flow:', supabaseErr)
+      // Step 1: Check if user exists in users table
+      console.log('🔍 Step 1: Checking if user exists in users table...')
+      const { data: userCheck, error: userCheckError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .single()
+      
+      console.log('🔍 User check result:', { userCheck, userCheckError })
+      
+      if (userCheckError) {
+        console.error('❌ User not found in users table:', userCheckError)
+        setError('User not found. Please contact your administrator.')
+        return
       }
       
-      // Fall back to normal login flow if direct Supabase login fails
-      await login(email, password)
+      if (!userCheck) {
+        console.error('❌ No user data returned from users table')
+        setError('User not found. Please contact your administrator.')
+        return
+      }
+      
+      console.log('✅ User found in users table:', userCheck)
+      
+      // Step 2: Try Supabase authentication
+      console.log('🔍 Step 2: Attempting Supabase authentication...')
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+      
+      console.log('🔍 Auth result:', { authData, authError })
+      
+      if (authError) {
+        console.error('❌ Supabase auth error:', authError)
+        if (authError.message.includes('Invalid login credentials')) {
+          setError('Invalid email or password')
+        } else if (authError.message.includes('Email not confirmed')) {
+          setError('Please verify your email address')
+        } else {
+          setError(`Authentication failed: ${authError.message}`)
+        }
+        return
+      }
+      
+      if (!authData.user) {
+        console.error('❌ No user data returned from auth')
+        setError('Authentication failed. No user data received.')
+        return
+      }
+      
+      console.log('✅ Supabase auth successful!')
+      console.log('✅ Auth user ID:', authData.user.id)
+      console.log('✅ Users table user ID:', userCheck.id)
+      
+      // Step 3: Verify user IDs match
+      if (authData.user.id !== userCheck.id) {
+        console.error('❌ User ID mismatch!', {
+          authId: authData.user.id,
+          usersTableId: userCheck.id
+        })
+        setError('User account mismatch. Please contact your administrator.')
+        return
+      }
+      
+      console.log('✅ User IDs match! Login successful!')
+      
       toast({ title: 'Success!', description: 'Welcome back to TaskFlow!' })
       
-      // Force navigation instead of using router.push
+      // Force navigation to dashboard
+      console.log('🔍 Redirecting to dashboard...')
       window.location.href = '/dashboard'
     } catch (err: any) {
-      console.error('Login error:', err)
+      console.error('❌ Unexpected login error:', err)
       
       if (err.message?.includes('Invalid login credentials')) {
         setError('Invalid email or password')
       } else if (err.message?.includes('Email not confirmed')) {
         setError('Please verify your email address')
       } else {
-        setError('Authentication failed. Please try again.')
+        setError(`Unexpected error: ${err.message || 'Please try again.'}`)
       }
     } finally {
+      console.log('🔍 Setting loading to false')
       setIsLoading(false)
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Debug Info */}
+      <div className="p-2 bg-blue-500/20 border border-blue-500/30 rounded-md text-xs text-blue-200">
+        <div>Debug: Loading = {isLoading ? 'true' : 'false'}</div>
+        <div>Debug: Email = {email}</div>
+        <div>Debug: Password length = {password.length}</div>
+      </div>
+      
       {error && (
         <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-md flex items-center space-x-2 text-sm text-red-200">
           <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
