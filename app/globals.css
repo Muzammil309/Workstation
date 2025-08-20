@@ -111,3 +111,9 @@
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-neon-blue focus:ring-offset-2 dark:focus:ring-offset-gray-900;
 }
+
+/* Hide database testing element */
+div[class*="Testing Database Connection"],
+div:has(> span:contains("Testing Database Connection")) {
+  display: none !important;
+}

@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast'
 import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 export function LoginForm() {
   const [email, setEmail] = useState('')
@@ -28,12 +29,42 @@ export function LoginForm() {
     try {
       if (!email || !password) {
         setError('Please fill in all fields')
+        setIsLoading(false)
         return
       }
 
+      console.log('🔍 Login attempt for:', email)
+      
+      // Try login with Supabase directly first
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        })
+        
+        if (error) {
+          console.error('❌ Supabase auth error:', error)
+          throw error
+        }
+        
+        if (data.user) {
+          console.log('✅ Supabase auth successful, user ID:', data.user.id)
+          toast({ title: 'Success!', description: 'Welcome back to TaskFlow!' })
+          
+          // Force navigation to dashboard
+          window.location.href = '/dashboard'
+          return
+        }
+      } catch (supabaseErr) {
+        console.error('Direct Supabase login failed, trying normal login flow:', supabaseErr)
+      }
+      
+      // Fall back to normal login flow if direct Supabase login fails
       await login(email, password)
       toast({ title: 'Success!', description: 'Welcome back to TaskFlow!' })
-      router.push('/dashboard')
+      
+      // Force navigation instead of using router.push
+      window.location.href = '/dashboard'
     } catch (err: any) {
       console.error('Login error:', err)
       
