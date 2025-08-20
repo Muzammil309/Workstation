@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
@@ -85,7 +85,12 @@ export default function DashboardPage() {
         isSidebarCollapsed ? "ml-16" : "ml-80"
       )}>
         <DashboardHeader
-          user={user}
+          user={{
+            firstName: user.firstName || user.name?.split(' ')[0] || 'User',
+            lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+            email: user.email,
+            role: user.role
+          }}
           onMenuClick={() => setIsSidebarOpen(true)}
           onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           isSidebarCollapsed={isSidebarCollapsed}

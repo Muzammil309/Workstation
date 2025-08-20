@@ -5,7 +5,7 @@ const nextConfig = {
   
   // Keep other settings
   experimental: {
-    appDir: true
+    // appDir is now enabled by default in Next.js 13+
   }
 }
 
