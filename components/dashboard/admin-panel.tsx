@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Users, Settings, Shield, Activity, Plus, Search, MoreVertical, Edit, Trash2, Eye } from 'lucide-react'
+import { Users, Settings, Shield, Activity, UserPlus, Search, MoreVertical, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
+import { UserManagement } from '@/components/dashboard/user-management'
+import { useAuth } from '@/hooks/use-auth'
 
 interface User {
   id: string
@@ -56,69 +58,45 @@ const sampleUsers: User[] = [
 ]
 
 export function AdminPanel() {
-  const [users, setUsers] = useState<User[]>(sampleUsers)
-  const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('users')
   const { toast } = useToast()
+  const { user: currentUser } = useAuth()
 
-  const filteredUsers = users.filter(user =>
-    user.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-  const handleUserStatusChange = (userId: string, newStatus: 'active' | 'inactive') => {
-    setUsers(users.map(user =>
-      user.id === userId ? { ...user, status: newStatus } : user
-    ))
-    toast({
-      title: "User Status Updated",
-      description: `User status changed to ${newStatus}`,
-    })
-  }
-
-  const handleUserRoleChange = (userId: string, newRole: 'user' | 'admin') => {
-    setUsers(users.map(user =>
-      user.id === userId ? { ...user, role: newRole } : user
-    ))
-    toast({
-      title: "User Role Updated",
-      description: `User role changed to ${newRole}`,
-    })
-  }
-
-  const deleteUser = (userId: string) => {
-    setUsers(users.filter(user => user.id !== userId))
-    toast({
-      title: "User Deleted",
-      description: "User has been removed from the system",
-    })
+  // Only admins can access this panel
+  if (currentUser?.role !== 'admin') {
+    return (
+      <div className="p-6 bg-red-500/10 border border-red-500/30 rounded-lg text-center">
+        <Shield className="w-12 h-12 text-red-400 mx-auto mb-4" />
+        <h3 className="text-xl font-bold text-white mb-2">Access Denied</h3>
+        <p className="text-gray-300">You don't have permission to access the admin panel.</p>
+      </div>
+    )
   }
 
   const stats = [
-    {
-      title: 'Total Users',
-      value: users.length.toString(),
-      icon: Users,
-      color: 'text-blue-600'
-    },
-    {
-      title: 'Active Users',
-      value: users.filter(u => u.status === 'active').length.toString(),
-      icon: Activity,
-      color: 'text-green-600'
-    },
-    {
-      title: 'Admin Users',
-      value: users.filter(u => u.role === 'admin').length.toString(),
-      icon: Shield,
-      color: 'text-purple-600'
-    },
     {
       title: 'System Status',
       value: 'Healthy',
       icon: Settings,
       color: 'text-green-600'
+    },
+    {
+      title: 'Database',
+      value: 'Connected',
+      icon: Activity,
+      color: 'text-green-600'
+    },
+    {
+      title: 'Security',
+      value: 'Enabled',
+      icon: Shield,
+      color: 'text-purple-600'
+    },
+    {
+      title: 'Last Backup',
+      value: new Date().toLocaleDateString(),
+      icon: Activity,
+      color: 'text-blue-600'
     }
   ]
 
@@ -188,108 +166,7 @@ export function AdminPanel() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-4"
         >
-          {/* Search and Actions */}
-          <div className="flex items-center justify-between">
-            <div className="relative w-96">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search users..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Button variant="neon">
-              <Plus className="h-4 w-4 mr-2" />
-              Add User
-            </Button>
-          </div>
-
-          {/* Users Table */}
-          <div className="bg-card border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      User
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Role
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Tasks
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Last Login
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-muted/50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium">{user.firstName} {user.lastName}</div>
-                          <div className="text-sm text-muted-foreground">{user.email}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={user.role}
-                          onChange={(e) => handleUserRoleChange(user.id, e.target.value as 'user' | 'admin')}
-                          className="text-sm border rounded px-2 py-1 bg-background"
-                        >
-                          <option value="user">User</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={user.status}
-                          onChange={(e) => handleUserStatusChange(user.id, e.target.value as 'active' | 'inactive')}
-                          className="text-sm border rounded px-2 py-1 bg-background"
-                        >
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                        </select>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                        {user.tasksCompleted}/{user.tasksAssigned}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                        {new Date(user.lastLogin).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex items-center space-x-2">
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => deleteUser(user.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <UserManagement />
         </motion.div>
       )}
 

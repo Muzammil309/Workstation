@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { LogIn, Eye, EyeOff } from 'lucide-react'
+import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 
@@ -15,6 +15,7 @@ export function LoginForm() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
   const { login } = useAuth()
   const router = useRouter()
@@ -22,26 +23,27 @@ export function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
     try {
       if (!email || !password) {
-        toast({
-          title: 'Error',
-          description: 'Please fill in all fields.',
-          variant: 'destructive',
-        })
+        setError('Please fill in all fields')
         return
       }
 
       await login(email, password)
       toast({ title: 'Success!', description: 'Welcome back to TaskFlow!' })
       router.push('/dashboard')
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Something went wrong. Please try again.',
-        variant: 'destructive',
-      })
+    } catch (err: any) {
+      console.error('Login error:', err)
+      
+      if (err.message?.includes('Invalid login credentials')) {
+        setError('Invalid email or password')
+      } else if (err.message?.includes('Email not confirmed')) {
+        setError('Please verify your email address')
+      } else {
+        setError('Authentication failed. Please try again.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -49,6 +51,13 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {error && (
+        <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-md flex items-center space-x-2 text-sm text-red-200">
+          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          <p>{error}</p>
+        </div>
+      )}
+      
       <div className="space-y-2">
         <Label htmlFor="email" className="text-white text-sm font-medium">
           Email Address
@@ -99,6 +108,10 @@ export function LoginForm() {
         <button
           type="button"
           className="text-sm text-neon-blue hover:text-neon-blue/80 transition-colors"
+          onClick={() => toast({ 
+            title: "Password Reset", 
+            description: "Please contact your administrator to reset your password."
+          })}
         >
           Forgot password?
         </button>
@@ -129,8 +142,12 @@ export function LoginForm() {
           <button
             type="button"
             className="text-neon-blue hover:text-neon-blue/80 transition-colors font-medium"
+            onClick={() => toast({ 
+              title: "Contact Admin", 
+              description: "Please contact your administrator to create an account for you."
+            })}
           >
-            Sign up
+            Contact Administrator
           </button>
         </p>
       </div>

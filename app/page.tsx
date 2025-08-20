@@ -7,6 +7,7 @@ import { SignupForm } from '@/components/auth/signup-form'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Rocket, Zap, Target, Users, BarChart3, Clock, ArrowRight, CheckCircle, Globe, Lightbulb, TrendingUp } from 'lucide-react'
+import { TestDB } from '@/components/test-db'
 
 
 export default function HomePage() {
@@ -226,6 +227,7 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+      <TestDB />
     </div>
   )
 }

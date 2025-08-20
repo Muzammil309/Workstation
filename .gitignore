@@ -1,1 +1,9 @@
 node_modules
+# .gitignore
+.env.local
+.env.production
+.env.development
+.env
+node_modules/
+.next/
+*.log
