@@ -29,6 +29,7 @@ export function TaskBoard() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [activeTimers, setActiveTimers] = useState<Record<string, { startTime: number; elapsed: number }>>({})
   
   const { user } = useAuth()
   const { toast } = useToast()
@@ -45,6 +46,23 @@ export function TaskBoard() {
       loadTasks()
     }
   }, [user])
+
+  // Update active timers
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTimers(prev => {
+        const updated = { ...prev }
+        Object.keys(updated).forEach(taskId => {
+          if (updated[taskId]) {
+            updated[taskId].elapsed = Date.now() - updated[taskId].startTime
+          }
+        })
+        return updated
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   const loadTasks = async () => {
     try {
@@ -207,6 +225,13 @@ export function TaskBoard() {
       // Update local state immediately for better UX
       setTasks(prev => prev.filter(task => task.id !== taskId))
       
+      // Clear timer if exists
+      setActiveTimers(prev => {
+        const newTimers = { ...prev }
+        delete newTimers[taskId]
+        return newTimers
+      })
+      
       toast({
         title: 'Success',
         description: 'Task deleted successfully!',
@@ -221,6 +246,36 @@ export function TaskBoard() {
     }
   }
 
+  // Timer management functions
+  const startTimer = (taskId: string) => {
+    setActiveTimers(prev => ({
+      ...prev,
+      [taskId]: { startTime: Date.now(), elapsed: 0 }
+    }))
+  }
+
+  const stopTimer = (taskId: string) => {
+    setActiveTimers(prev => {
+      const newTimers = { ...prev }
+      delete newTimers[taskId]
+      return newTimers
+    })
+  }
+
+  const formatTime = (milliseconds: number) => {
+    const seconds = Math.floor(milliseconds / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`
+    } else {
+      return `${seconds}s`
+    }
+  }
+
   // Drag & Drop handlers
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
@@ -230,12 +285,16 @@ export function TaskBoard() {
     const activeTask = tasks.find(task => task.id === active.id)
     if (!activeTask) return
     
-    // Check if dropping on a column or task
+    // Get the target column from the drop zone
     let newStatus = activeTask.status
     
-    // If dropping on a column (over.id is column id)
-    if (over.id === 'pending' || over.id === 'in-progress' || over.id === 'completed') {
-      newStatus = over.id as 'pending' | 'in-progress' | 'completed'
+    // Check if dropping on a column drop zone
+    if (over.id === 'pending') {
+      newStatus = 'pending'
+    } else if (over.id === 'in-progress') {
+      newStatus = 'in-progress'
+    } else if (over.id === 'completed') {
+      newStatus = 'completed'
     } else {
       // If dropping on another task, get its status
       const overTask = tasks.find(task => task.id === over.id)
@@ -582,14 +641,18 @@ export function TaskBoard() {
                   items={tasks.filter(task => task.status === 'pending').map(t => t.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {tasks.filter(task => task.status === 'pending').map((task) => (
-                    <SortableTaskCard 
-                      key={task.id} 
-                      task={task} 
-                      onUpdate={handleUpdateTask} 
-                      onDelete={handleDeleteTask} 
-                    />
-                  ))}
+                                     {tasks.filter(task => task.status === 'pending').map((task) => (
+                     <SortableTaskCard 
+                       key={task.id} 
+                       task={task} 
+                       onUpdate={handleUpdateTask} 
+                       onDelete={handleDeleteTask}
+                       onStartTimer={startTimer}
+                       onStopTimer={stopTimer}
+                       activeTimers={activeTimers}
+                       formatTime={formatTime}
+                     />
+                   ))}
                 </SortableContext>
               )}
             </div>
@@ -620,14 +683,18 @@ export function TaskBoard() {
                   items={tasks.filter(task => task.status === 'in-progress').map(t => t.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {tasks.filter(task => task.status === 'in-progress').map((task) => (
-                    <SortableTaskCard 
-                      key={task.id} 
-                      task={task} 
-                      onUpdate={handleUpdateTask} 
-                      onDelete={handleDeleteTask} 
-                    />
-                  ))}
+                                     {tasks.filter(task => task.status === 'in-progress').map((task) => (
+                     <SortableTaskCard 
+                       key={task.id} 
+                       task={task} 
+                       onUpdate={handleUpdateTask} 
+                       onDelete={handleDeleteTask}
+                       onStartTimer={startTimer}
+                       onStopTimer={stopTimer}
+                       activeTimers={activeTimers}
+                       formatTime={formatTime}
+                     />
+                   ))}
                 </SortableContext>
               )}
             </div>
@@ -658,14 +725,18 @@ export function TaskBoard() {
                   items={tasks.filter(task => task.status === 'completed').map(t => t.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {tasks.filter(task => task.status === 'completed').map((task) => (
-                    <SortableTaskCard 
-                      key={task.id} 
-                      task={task} 
-                      onUpdate={handleUpdateTask} 
-                      onDelete={handleDeleteTask} 
-                    />
-                  ))}
+                                     {tasks.filter(task => task.status === 'completed').map((task) => (
+                     <SortableTaskCard 
+                       key={task.id} 
+                       task={task} 
+                       onUpdate={handleUpdateTask} 
+                       onDelete={handleDeleteTask}
+                       onStartTimer={startTimer}
+                       onStopTimer={stopTimer}
+                       activeTimers={activeTimers}
+                       formatTime={formatTime}
+                     />
+                   ))}
                 </SortableContext>
               )}
             </div>
@@ -681,9 +752,21 @@ interface SortableTaskCardProps {
   task: Task
   onUpdate: (taskId: string, updates: Partial<CreateTaskData>) => void
   onDelete: (taskId: string) => void
+  onStartTimer: (taskId: string) => void
+  onStopTimer: (taskId: string) => void
+  activeTimers: Record<string, { startTime: number; elapsed: number }>
+  formatTime: (ms: number) => string
 }
 
-function SortableTaskCard({ task, onUpdate, onDelete }: SortableTaskCardProps) {
+function SortableTaskCard({ 
+  task, 
+  onUpdate, 
+  onDelete, 
+  onStartTimer, 
+  onStopTimer, 
+  activeTimers, 
+  formatTime 
+}: SortableTaskCardProps) {
   const {
     attributes,
     listeners,
@@ -698,6 +781,11 @@ function SortableTaskCard({ task, onUpdate, onDelete }: SortableTaskCardProps) {
     transition,
     opacity: isDragging ? 0.5 : 1,
   }
+
+  const isTimerActive = activeTimers[task.id]
+  const canStartTimer = task.status === 'pending'
+  const canComplete = task.status === 'in-progress'
+  const canReopen = task.status === 'completed'
 
   return (
     <div
@@ -716,6 +804,18 @@ function SortableTaskCard({ task, onUpdate, onDelete }: SortableTaskCardProps) {
           <p className="text-muted-foreground dark:text-gray-300 text-xs leading-relaxed line-clamp-2">
             {task.description}
           </p>
+        )}
+        
+        {/* Timer Display */}
+        {isTimerActive && (
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded px-2 py-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-blue-600 dark:text-blue-400 font-medium">⏱️ Timer</span>
+              <span className="text-blue-600 dark:text-blue-400 font-mono">
+                {formatTime(activeTimers[task.id].elapsed)}
+              </span>
+            </div>
+          </div>
         )}
         
         {/* Priority Badge */}
@@ -742,21 +842,60 @@ function SortableTaskCard({ task, onUpdate, onDelete }: SortableTaskCardProps) {
         
         {/* Action Buttons */}
         <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onUpdate(task.id, { 
-              status: task.status === 'pending' ? 'in-progress' : 
-                      task.status === 'in-progress' ? 'completed' : 'pending'
-            })}
-            className="text-neon-blue hover:text-neon-blue/80 text-xs font-medium"
-          >
-            {task.status === 'pending' ? '→ Start' :
-             task.status === 'in-progress' ? '→ Complete' : '↶ Reopen'}
-          </button>
+          <div className="flex items-center space-x-2">
+            {/* Start Timer Button */}
+            {canStartTimer && (
+              <button
+                onClick={() => {
+                  onStartTimer(task.id)
+                  onUpdate(task.id, { status: 'in-progress' })
+                }}
+                className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 text-xs font-medium"
+              >
+                ▶️ Start
+              </button>
+            )}
+            
+            {/* Stop Timer Button */}
+            {isTimerActive && (
+              <button
+                onClick={() => onStopTimer(task.id)}
+                className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 text-xs font-medium"
+              >
+                ⏹️ Stop
+              </button>
+            )}
+            
+            {/* Complete Button */}
+            {canComplete && (
+              <button
+                onClick={() => {
+                  onStopTimer(task.id)
+                  onUpdate(task.id, { status: 'completed' })
+                }}
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-xs font-medium"
+              >
+                ✅ Complete
+              </button>
+            )}
+            
+            {/* Reopen Button */}
+            {canReopen && (
+              <button
+                onClick={() => onUpdate(task.id, { status: 'pending' })}
+                className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-xs font-medium"
+              >
+                🔄 Reopen
+              </button>
+            )}
+          </div>
+          
+          {/* Delete Button */}
           <button
             onClick={() => onDelete(task.id)}
             className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 text-xs font-medium"
           >
-            Delete
+            🗑️ Delete
           </button>
         </div>
       </div>
