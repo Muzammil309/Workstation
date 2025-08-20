@@ -117,3 +117,11 @@ div[class*="Testing Database Connection"],
 div:has(> span:contains("Testing Database Connection")) {
   display: none !important;
 }
+
+/* Line clamp utilities */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
