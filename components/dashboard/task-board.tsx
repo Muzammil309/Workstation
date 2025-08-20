@@ -147,11 +147,31 @@ export function TaskBoard() {
   const handleUpdateTask = async (taskId: string, updates: Partial<CreateTaskData>) => {
     try {
       console.log('🔄 Updating task:', taskId, 'with:', updates)
-      const updatedTask = await TasksService.updateTask(taskId, updates)
-      console.log('✅ Task updated successfully:', updatedTask)
       
-      // Reload tasks from database
-      await loadTasks()
+      // Use direct Supabase call instead of TasksService
+      const { data, error } = await supabase
+        .from('tasks')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', taskId)
+        .select()
+        .single()
+      
+      if (error) {
+        console.error('❌ Failed to update task:', error)
+        throw error
+      }
+      
+      console.log('✅ Task updated successfully:', data)
+      
+      // Update local state immediately for better UX
+      setTasks(prev => prev.map(task => 
+        task.id === taskId 
+          ? { ...task, ...updates }
+          : task
+      ))
       
       toast({
         title: 'Success',
@@ -170,11 +190,22 @@ export function TaskBoard() {
   const handleDeleteTask = async (taskId: string) => {
     try {
       console.log('🔄 Deleting task:', taskId)
-      await TasksService.deleteTask(taskId)
+      
+      // Use direct Supabase call instead of TasksService
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId)
+      
+      if (error) {
+        console.error('❌ Failed to delete task:', error)
+        throw error
+      }
+      
       console.log('✅ Task deleted successfully')
       
-      // Reload tasks from database
-      await loadTasks()
+      // Update local state immediately for better UX
+      setTasks(prev => prev.filter(task => task.id !== taskId))
       
       toast({
         title: 'Success',
@@ -197,18 +228,26 @@ export function TaskBoard() {
     if (!over || active.id === over.id) return
     
     const activeTask = tasks.find(task => task.id === active.id)
-    const overColumn = over.id as string
-    
     if (!activeTask) return
     
-    // Determine new status based on column
+    // Check if dropping on a column or task
     let newStatus = activeTask.status
-    if (overColumn === 'pending') newStatus = 'pending'
-    else if (overColumn === 'in-progress') newStatus = 'in-progress'
-    else if (overColumn === 'completed') newStatus = 'completed'
+    
+    // If dropping on a column (over.id is column id)
+    if (over.id === 'pending' || over.id === 'in-progress' || over.id === 'completed') {
+      newStatus = over.id as 'pending' | 'in-progress' | 'completed'
+    } else {
+      // If dropping on another task, get its status
+      const overTask = tasks.find(task => task.id === over.id)
+      if (overTask) {
+        newStatus = overTask.status
+      }
+    }
     
     if (newStatus !== activeTask.status) {
       try {
+        console.log(`🔄 Moving task "${activeTask.title}" from ${activeTask.status} to ${newStatus}`)
+        
         // Update task status in database
         const { error } = await supabase
           .from('tasks')
@@ -529,10 +568,11 @@ export function TaskBoard() {
                 {tasks.filter(task => task.status === 'pending').length}
               </span>
             </div>
-            <div 
-              id="pending"
-              className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3"
-            >
+                         <div 
+               id="pending"
+               className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
+               data-column="pending"
+             >
               {tasks.filter(task => task.status === 'pending').length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   No pending tasks
@@ -566,10 +606,11 @@ export function TaskBoard() {
                 {tasks.filter(task => task.status === 'in-progress').length}
               </span>
             </div>
-            <div 
-              id="in-progress"
-              className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3"
-            >
+                         <div 
+               id="in-progress"
+               className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
+               data-column="in-progress"
+             >
               {tasks.filter(task => task.status === 'in-progress').length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   No tasks in progress
@@ -603,10 +644,11 @@ export function TaskBoard() {
                 {tasks.filter(task => task.status === 'completed').length}
               </span>
             </div>
-            <div 
-              id="completed"
-              className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3"
-            >
+                         <div 
+               id="completed"
+               className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
+               data-column="completed"
+             >
               {tasks.filter(task => task.status === 'completed').length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   No completed tasks

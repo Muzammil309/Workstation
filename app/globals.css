@@ -188,3 +188,27 @@ div:has(> span:contains("Testing Database Connection")) {
 .column-dark:hover {
   background-color: rgba(255, 255, 255, 0.08);
 }
+
+/* Drop zone styling */
+.drop-zone {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+}
+
+.drop-zone:hover {
+  border: 2px dashed rgba(59, 130, 246, 0.5);
+}
+
+.drop-zone[data-over="true"] {
+  border: 2px dashed rgba(59, 130, 246, 0.8);
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Drag over effects */
+.column-light[data-over="true"] {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.column-dark[data-over="true"] {
+  background-color: rgba(59, 130, 246, 0.15);
+}

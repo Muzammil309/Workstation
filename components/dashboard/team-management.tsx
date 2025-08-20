@@ -87,6 +87,7 @@ export function TeamManagement() {
     email: '',
     role: '',
     department: '',
+    customDepartment: '',
     phone: '',
     location: '',
     skills: '',
@@ -125,12 +126,25 @@ export function TeamManagement() {
       return
     }
 
+    // Handle custom department
+    let finalDepartment = newMember.department
+    if (newMember.department === 'custom' && newMember.customDepartment) {
+      finalDepartment = newMember.customDepartment
+    } else if (newMember.department === 'custom' && !newMember.customDepartment) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a custom department name",
+        variant: "destructive"
+      })
+      return
+    }
+
     const member: TeamMember = {
       id: Date.now().toString(),
       name: newMember.name,
       email: newMember.email,
       role: newMember.role,
-      department: newMember.department,
+      department: finalDepartment,
       avatar: newMember.name.split(' ').map(n => n[0]).join('').toUpperCase(),
       status: newMember.status,
       joinDate: new Date().toISOString().split('T')[0],
@@ -147,6 +161,7 @@ export function TeamManagement() {
       email: '',
       role: '',
       department: '',
+      customDepartment: '',
       phone: '',
       location: '',
       skills: '',
@@ -166,6 +181,7 @@ export function TeamManagement() {
       email: '',
       role: '',
       department: '',
+      customDepartment: '',
       phone: '',
       location: '',
       skills: '',
@@ -261,6 +277,21 @@ export function TeamManagement() {
           <option value="Product">Product</option>
           <option value="Design">Design</option>
           <option value="Marketing">Marketing</option>
+          <option value="Sales">Sales</option>
+          <option value="HR">HR</option>
+          <option value="Finance">Finance</option>
+          <option value="Operations">Operations</option>
+          <option value="Customer Support">Customer Support</option>
+          <option value="Legal">Legal</option>
+          <option value="Research & Development">Research & Development</option>
+          <option value="Quality Assurance">Quality Assurance</option>
+          <option value="DevOps">DevOps</option>
+          <option value="Data Science">Data Science</option>
+          <option value="Business Development">Business Development</option>
+          <option value="Project Management">Project Management</option>
+          <option value="Training">Training</option>
+          <option value="Security">Security</option>
+          <option value="Infrastructure">Infrastructure</option>
         </select>
       </div>
 
@@ -430,20 +461,46 @@ export function TeamManagement() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Department *</label>
-                  <select
-                    value={newMember.department}
-                    onChange={(e) => setNewMember({ ...newMember, department: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-md bg-background text-sm"
-                  >
-                    <option value="">Select Department</option>
-                    <option value="Engineering">Engineering</option>
-                    <option value="Product">Product</option>
-                    <option value="Design">Design</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Sales">Sales</option>
-                    <option value="HR">HR</option>
-                    <option value="Finance">Finance</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={newMember.department}
+                      onChange={(e) => setNewMember({ ...newMember, department: e.target.value })}
+                      className="flex-1 px-3 py-2 border rounded-md bg-background text-sm"
+                    >
+                      <option value="">Select Department</option>
+                      <option value="Engineering">Engineering</option>
+                      <option value="Product">Product</option>
+                      <option value="Design">Design</option>
+                      <option value="Marketing">Marketing</option>
+                      <option value="Sales">Sales</option>
+                      <option value="HR">HR</option>
+                      <option value="Finance">Finance</option>
+                      <option value="Operations">Operations</option>
+                      <option value="Customer Support">Customer Support</option>
+                      <option value="Legal">Legal</option>
+                      <option value="Research & Development">Research & Development</option>
+                      <option value="Quality Assurance">Quality Assurance</option>
+                      <option value="DevOps">DevOps</option>
+                      <option value="Data Science">Data Science</option>
+                      <option value="Business Development">Business Development</option>
+                      <option value="Project Management">Project Management</option>
+                      <option value="Training">Training</option>
+                      <option value="Security">Security</option>
+                      <option value="Infrastructure">Infrastructure</option>
+                      <option value="custom">+ Add Custom Department</option>
+                    </select>
+                    {newMember.department === 'custom' && (
+                      <Input
+                        placeholder="Enter custom department"
+                        value={newMember.customDepartment || ''}
+                        onChange={(e) => setNewMember({ ...newMember, customDepartment: e.target.value })}
+                        className="flex-1"
+                      />
+                    )}
+                  </div>
+                  {newMember.department === 'custom' && (
+                    <p className="text-xs text-muted-foreground">Type your custom department name</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
