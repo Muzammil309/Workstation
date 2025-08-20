@@ -248,6 +248,7 @@ export function TaskBoard() {
 
   // Timer management functions
   const startTimer = (taskId: string) => {
+    console.log('⏱️ Starting timer for task:', taskId)
     setActiveTimers(prev => ({
       ...prev,
       [taskId]: { startTime: Date.now(), elapsed: 0 }
@@ -288,12 +289,14 @@ export function TaskBoard() {
     // Get the target column from the drop zone
     let newStatus = activeTask.status
     
-    // Check if dropping on a column drop zone
-    if (over.id === 'pending') {
+    // Check if dropping on a column drop zone by looking at the parent container
+    const targetElement = over.id as string
+    
+    if (targetElement === 'pending' || targetElement === 'pending-column') {
       newStatus = 'pending'
-    } else if (over.id === 'in-progress') {
+    } else if (targetElement === 'in-progress' || targetElement === 'in-progress-column') {
       newStatus = 'in-progress'
-    } else if (over.id === 'completed') {
+    } else if (targetElement === 'completed' || targetElement === 'completed-column') {
       newStatus = 'completed'
     } else {
       // If dropping on another task, get its status
@@ -443,160 +446,6 @@ export function TaskBoard() {
         </div>
       </div>
 
-      {/* Debug Info */}
-      <div className="bg-gray-800/50 p-4 rounded-lg text-sm">
-        <div className="text-gray-300 mb-2">Debug Info:</div>
-        <div className="grid grid-cols-2 gap-4 text-xs">
-          <div>
-            <span className="text-gray-400">User ID:</span> {user?.id || 'Not logged in'}
-          </div>
-          <div>
-            <span className="text-gray-400">Tasks Count:</span> {tasks.length}
-          </div>
-          <div>
-            <span className="text-gray-400">Loading:</span> {isLoading ? 'Yes' : 'No'}
-          </div>
-          <div>
-            <span className="text-gray-400">Last Updated:</span> {new Date().toLocaleTimeString()}
-          </div>
-        </div>
-        <div className="mt-3 space-y-2">
-          <button
-            onClick={async () => {
-              console.log('🧪 Testing database connection...')
-              try {
-                const { data, error } = await supabase.from('tasks').select('*').limit(5)
-                console.log('🧪 Direct Supabase query result:', { data, error })
-                if (error) throw error
-                alert(`Database test successful! Found ${data?.length || 0} tasks.`)
-              } catch (err: any) {
-                console.error('🧪 Database test failed:', err)
-                alert(`Database test failed: ${err.message}`)
-              }
-            }}
-            className="bg-yellow-600 text-white px-3 py-1 rounded text-xs hover:bg-yellow-700 mr-2"
-          >
-            Test DB Connection
-          </button>
-          <button
-            onClick={async () => {
-              console.log('🔍 Checking if tasks table exists...')
-              try {
-                // Try to get table info
-                const { data, error } = await supabase
-                  .from('tasks')
-                  .select('*')
-                  .limit(1)
-                
-                if (error) {
-                  if (error.message.includes('does not exist')) {
-                    alert('❌ Tasks table does not exist! You need to create it in Supabase.')
-                  } else {
-                    alert(`❌ Table access error: ${error.message}`)
-                  }
-                } else {
-                  alert(`✅ Tasks table exists and accessible!`)
-                }
-                
-                console.log('🔍 Table check result:', { data, error })
-              } catch (err: any) {
-                console.error('🔍 Table check failed:', err)
-                alert(`Table check failed: ${err.message}`)
-              }
-            }}
-            className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 mr-2"
-          >
-            Check Table
-          </button>
-          <button
-            onClick={async () => {
-              console.log('📊 Checking database schema...')
-              try {
-                // Try to get all tables
-                const { data, error } = await supabase
-                  .from('information_schema.tables')
-                  .select('table_name')
-                  .eq('table_schema', 'public')
-                
-                if (error) {
-                  alert(`❌ Schema check failed: ${error.message}`)
-                } else {
-                  const tableNames = data?.map(t => t.table_name).join(', ')
-                  alert(`📊 Available tables: ${tableNames || 'None'}`)
-                }
-                
-                console.log('📊 Schema check result:', { data, error })
-              } catch (err: any) {
-                console.error('📊 Schema check failed:', err)
-                alert(`Schema check failed: ${err.message}`)
-              }
-            }}
-            className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 mr-2"
-          >
-            Check Schema
-          </button>
-          <button
-            onClick={async () => {
-              if (!user) {
-                alert('❌ You must be logged in to create test tasks')
-                return
-              }
-              
-              console.log('🧪 Creating test task...')
-              try {
-                const testTask = {
-                  title: 'Test Task - ' + new Date().toLocaleTimeString(),
-                  description: 'This is a test task to verify database connection',
-                  priority: 'medium' as const,
-                  status: 'pending' as const,
-                  progress: 0
-                }
-                
-                console.log('🧪 Test task data:', testTask)
-                console.log('🧪 User ID:', user.id)
-                
-                // Try direct Supabase insert first
-                const { data, error } = await supabase
-                  .from('tasks')
-                  .insert({
-                    title: testTask.title,
-                    description: testTask.description,
-                    priority: testTask.priority,
-                    status: testTask.status,
-                    progress: testTask.progress,
-                    created_by: user.id,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                  })
-                  .select()
-                  .single()
-                
-                if (error) {
-                  console.error('🧪 Test task creation failed:', error)
-                  alert(`❌ Test task creation failed: ${error.message}`)
-                  
-                  // Try to get more details about the error
-                  if (error.message.includes('RLS')) {
-                    alert('🔒 This looks like a Row Level Security (RLS) policy issue. You may need to create RLS policies for the tasks table.')
-                  }
-                } else {
-                  console.log('🧪 Test task created successfully:', data)
-                  alert(`✅ Test task created successfully! ID: ${data.id}`)
-                  // Reload tasks
-                  await loadTasks()
-                }
-              } catch (err: any) {
-                console.error('🧪 Test task creation failed:', err)
-                alert(`Test task creation failed: ${err.message}`)
-              }
-            }}
-            className="bg-purple-600 text-white px-3 py-1 rounded text-xs hover:bg-purple-700"
-          >
-            Create Test Task
-          </button>
-        </div>
-      </div>
-
       {/* Create Task Modal */}
       <CreateTaskModal
         isOpen={showCreateModal}
@@ -628,7 +477,7 @@ export function TaskBoard() {
               </span>
             </div>
                          <div 
-               id="pending"
+               id="pending-column"
                className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
                data-column="pending"
              >
@@ -670,7 +519,7 @@ export function TaskBoard() {
               </span>
             </div>
                          <div 
-               id="in-progress"
+               id="in-progress-column"
                className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
                data-column="in-progress"
              >
@@ -712,7 +561,7 @@ export function TaskBoard() {
               </span>
             </div>
                          <div 
-               id="completed"
+               id="completed-column"
                className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
                data-column="completed"
              >
@@ -843,18 +692,19 @@ function SortableTaskCard({
         {/* Action Buttons */}
         <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="flex items-center space-x-2">
-            {/* Start Timer Button */}
-            {canStartTimer && (
-              <button
-                onClick={() => {
-                  onStartTimer(task.id)
-                  onUpdate(task.id, { status: 'in-progress' })
-                }}
-                className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 text-xs font-medium"
-              >
-                ▶️ Start
-              </button>
-            )}
+                         {/* Start Timer Button */}
+             {canStartTimer && (
+               <button
+                 onClick={async () => {
+                   console.log('🚀 Starting task:', task.id)
+                   onStartTimer(task.id)
+                   await onUpdate(task.id, { status: 'in-progress' })
+                 }}
+                 className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 text-xs font-medium"
+               >
+                 ▶️ Start
+               </button>
+             )}
             
             {/* Stop Timer Button */}
             {isTimerActive && (
@@ -890,13 +740,17 @@ function SortableTaskCard({
             )}
           </div>
           
-          {/* Delete Button */}
-          <button
-            onClick={() => onDelete(task.id)}
-            className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 text-xs font-medium"
-          >
-            🗑️ Delete
-          </button>
+                     {/* Delete Button */}
+           <button
+             onClick={async () => {
+               if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
+                 await onDelete(task.id)
+               }
+             }}
+             className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 text-xs font-medium"
+           >
+             🗑️ Delete
+           </button>
         </div>
       </div>
     </div>
