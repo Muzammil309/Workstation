@@ -17,49 +17,76 @@ export function useAuth() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Check if user is already authenticated with Supabase
+    // Simplified auth check
     const checkAuth = async () => {
       try {
-        console.log('🔍 useAuth: Starting auth check...')
+        console.log('🔍 useAuth: Starting simplified auth check...')
         const { data: { session } } = await supabase.auth.getSession()
-        console.log('🔍 useAuth: Session check result:', { session: !!session, userId: session?.user?.id })
+        console.log('🔍 useAuth: Session result:', { 
+          hasSession: !!session, 
+          userId: session?.user?.id,
+          email: session?.user?.email 
+        })
         
-        if (session) {
-          console.log('🔍 useAuth: Session found, checking users table...')
-          // Get user details from database
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
+        if (session?.user) {
+          console.log('🔍 useAuth: Session found, getting user from users table...')
+          
+          // Try to get user from users table, but don't fail if it doesn't exist
+          try {
+            const { data: userData, error } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single()
+              
+            console.log('🔍 useAuth: Users table query result:', { userData, error })
             
-          console.log('🔍 useAuth: Users table query result:', { userData, error })
-          
-          if (error) {
-            console.error('❌ useAuth: Error fetching user from users table:', error)
-            throw error
-          }
-          
-          if (userData) {
-            console.log('✅ useAuth: User data found, formatting user...')
-            const formattedUser: User = {
-              id: userData.id,
-              email: userData.email,
-              name: userData.name,
-              firstName: userData.name?.split(' ')[0],
-              lastName: userData.name?.split(' ').slice(1).join(' '),
-              role: userData.role as 'user' | 'admin'
+            if (userData) {
+              const formattedUser: User = {
+                id: userData.id,
+                email: userData.email,
+                name: userData.name,
+                firstName: userData.name?.split(' ')[0],
+                lastName: userData.name?.split(' ').slice(1).join(' '),
+                role: userData.role as 'user' | 'admin'
+              }
+              console.log('✅ useAuth: Setting user from users table:', formattedUser)
+              setUser(formattedUser)
+            } else {
+              // Fallback: create user object from session data
+              console.log('⚠️ useAuth: No user in users table, using session data')
+              const fallbackUser: User = {
+                id: session.user.id,
+                email: session.user.email || '',
+                name: session.user.email || '',
+                firstName: session.user.email?.split('@')[0] || 'User',
+                lastName: '',
+                role: 'admin' // Default to admin for now
+              }
+              console.log('✅ useAuth: Setting fallback user:', fallbackUser)
+              setUser(fallbackUser)
             }
-            console.log('✅ useAuth: Setting user:', formattedUser)
-            setUser(formattedUser)
-          } else {
-            console.log('⚠️ useAuth: No user data found in users table')
+          } catch (userError) {
+            console.error('❌ useAuth: Error getting user from users table:', userError)
+            // Still create a fallback user from session
+            const fallbackUser: User = {
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.email || '',
+              firstName: session.user.email?.split('@')[0] || 'User',
+              lastName: '',
+              role: 'admin'
+            }
+            console.log('✅ useAuth: Setting fallback user after error:', fallbackUser)
+            setUser(fallbackUser)
           }
         } else {
-          console.log('🔍 useAuth: No session found')
+          console.log('🔍 useAuth: No valid session found')
+          setUser(null)
         }
       } catch (error) {
         console.error('❌ useAuth: Auth check failed:', error)
+        setUser(null)
       } finally {
         console.log('🔍 useAuth: Setting isLoading to false')
         setIsLoading(false)
@@ -73,35 +100,27 @@ export function useAuth() {
       async (event, session) => {
         console.log('🔍 useAuth: Auth state change event:', event, 'Session:', !!session)
         
-        if (event === 'SIGNED_IN' && session) {
-          console.log('🔍 useAuth: SIGNED_IN event, getting user details from database...')
-          // Get user details from database when they sign in
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-            
-          console.log('🔍 useAuth: Database query result for SIGNED_IN:', { userData, error })
+        if (event === 'SIGNED_IN' && session?.user) {
+          console.log('🔍 useAuth: SIGNED_IN event detected')
           
-          if (!error && userData) {
-            console.log('✅ useAuth: User data found for SIGNED_IN, formatting...')
-            const formattedUser: User = {
-              id: userData.id,
-              email: userData.email,
-              name: userData.name,
-              firstName: userData.name?.split(' ')[0],
-              lastName: userData.name?.split(' ').slice(1).join(' '),
-              role: userData.role as 'user' | 'admin'
-            }
-            console.log('✅ useAuth: Setting user from SIGNED_IN event:', formattedUser)
-            setUser(formattedUser)
-          } else {
-            console.error('❌ useAuth: Error getting user data for SIGNED_IN:', error)
+          // Create user immediately from session data
+          const fallbackUser: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.email || '',
+            firstName: session.user.email?.split('@')[0] || 'User',
+            lastName: '',
+            role: 'admin'
           }
+          
+          console.log('✅ useAuth: Setting user from SIGNED_IN event:', fallbackUser)
+          setUser(fallbackUser)
+          setIsLoading(false)
+          
         } else if (event === 'SIGNED_OUT') {
           console.log('🔍 useAuth: SIGNED_OUT event, clearing user')
           setUser(null)
+          setIsLoading(false)
         }
       }
     )

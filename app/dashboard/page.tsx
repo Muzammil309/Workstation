@@ -28,15 +28,28 @@ export default function DashboardPage() {
     console.log('🔍 DashboardPage: Showing loading spinner')
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-neon-blue"></div>
+        <div className="space-y-4 text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-neon-blue mx-auto"></div>
+          <div className="text-white">Loading dashboard...</div>
+          <div className="text-gray-400 text-sm">
+            Debug: isLoading = {isLoading ? 'true' : 'false'}, user = {user ? 'exists' : 'null'}
+          </div>
+        </div>
       </div>
     )
   }
 
   if (!user) {
-    console.log('🔍 DashboardPage: No user, returning null')
-    // Redirect to login would happen here
-    return null
+    console.log('🔍 DashboardPage: No user, redirecting to login')
+    // Force redirect to login
+    if (typeof window !== 'undefined') {
+      window.location.href = '/'
+    }
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-white">Redirecting to login...</div>
+      </div>
+    )
   }
 
   console.log('🔍 DashboardPage: User authenticated, rendering dashboard')

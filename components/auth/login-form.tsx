@@ -126,13 +126,6 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Debug Info */}
-      <div className="p-2 bg-blue-500/20 border border-blue-500/30 rounded-md text-xs text-blue-200">
-        <div>Debug: Loading = {isLoading ? 'true' : 'false'}</div>
-        <div>Debug: Email = {email}</div>
-        <div>Debug: Password length = {password.length}</div>
-      </div>
-      
       {error && (
         <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-md flex items-center space-x-2 text-sm text-red-200">
           <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
