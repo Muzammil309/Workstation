@@ -33,11 +33,24 @@ export function TaskBoard() {
       console.log('🔄 Loading tasks from database...')
       console.log('🔍 Current user:', user)
       
-      const tasksData = await TasksService.getTasks()
-      console.log('✅ Tasks loaded:', tasksData)
-      console.log('📊 Tasks count:', tasksData?.length || 0)
+      // Use direct Supabase call instead of TasksService
+      console.log('🔄 Using direct Supabase query...')
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: false })
       
-      setTasks(tasksData || [])
+      console.log('🔍 Direct Supabase query result:', { data, error })
+      
+      if (error) {
+        console.error('❌ Supabase query error:', error)
+        throw error
+      }
+      
+      console.log('✅ Tasks loaded directly from Supabase:', data)
+      console.log('📊 Tasks count:', data?.length || 0)
+      
+      setTasks(data || [])
     } catch (error: any) {
       console.error('❌ Failed to load tasks:', error)
       console.error('❌ Error details:', {
@@ -69,10 +82,32 @@ export function TaskBoard() {
 
     try {
       console.log('🔄 Creating task:', newTask, 'for user:', user.id)
-      const createdTask = await TasksService.createTask(newTask, user.id)
-      console.log('✅ Task created successfully:', createdTask)
       
-      // Reload tasks from database instead of just adding to local state
+      // Bypass TasksService and use direct Supabase call
+      console.log('🔄 Using direct Supabase insertion...')
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({
+          title: newTask.title,
+          description: newTask.description || '',
+          status: newTask.status || 'pending',
+          priority: newTask.priority || 'medium',
+          progress: 0,
+          created_by: user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+        
+      if (error) {
+        console.error('❌ Direct Supabase insertion failed:', error)
+        throw error
+      }
+      
+      console.log('✅ Direct Supabase insertion successful:', data)
+      
+      // Reload tasks from database
       await loadTasks()
       
       setNewTask({ title: '', description: '', priority: 'medium', status: 'pending' })
@@ -82,11 +117,11 @@ export function TaskBoard() {
         title: 'Success',
         description: 'Task created successfully!',
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to create task:', error)
       toast({
         title: 'Error',
-        description: 'Failed to create task. Please try again.',
+        description: `Failed to create task: ${error.message}`,
         variant: 'destructive',
       })
     }
