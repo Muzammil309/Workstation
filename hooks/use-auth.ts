@@ -88,16 +88,15 @@ export function useAuth() {
 
   const login = async (email: string, password: string) => {
     try {
-      // First, check if user exists in our users table and is active
+      // First, check if user exists in our users table
       const { data: userCheck, error: userCheckError } = await supabase
         .from('users')
         .select('*')
         .eq('email', email)
-        .eq('status', 'active')
         .single()
       
       if (userCheckError || !userCheck) {
-        throw new Error('User not found or account is inactive. Please contact your administrator.')
+        throw new Error('User not found. Please contact your administrator.')
       }
       
       // Now attempt to authenticate with Supabase

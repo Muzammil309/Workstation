@@ -64,10 +64,12 @@ export function LoginForm() {
         </Label>
         <Input
           id="email"
+          name="email"
           type="email"
           placeholder="Enter your email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
           className="glass-card border-white/20 text-white placeholder:text-gray-400 focus:border-neon-blue focus:ring-neon-blue/20"
           required
         />
@@ -80,10 +82,12 @@ export function LoginForm() {
         <div className="relative">
           <Input
             id="password"
+            name="password"
             type={showPassword ? "text" : "password"}
             placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
             className="glass-card border-white/20 text-white placeholder:text-gray-400 focus:border-neon-blue focus:ring-neon-blue/20 pr-10"
             required
           />
@@ -101,6 +105,8 @@ export function LoginForm() {
         <label className="flex items-center space-x-2">
           <input
             type="checkbox"
+            name="remember"
+            autoComplete="off"
             className="w-4 h-4 text-neon-blue bg-transparent border-white/20 rounded focus:ring-neon-blue/20"
           />
           <span className="text-sm text-gray-300">Remember me</span>

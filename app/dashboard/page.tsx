@@ -15,7 +15,6 @@ import { ReportsPanel } from '@/components/dashboard/reports-panel'
 import { TemplatesPanel } from '@/components/dashboard/templates-panel'
 import { IntegrationsPanel } from '@/components/dashboard/integrations-panel'
 import { useAuth } from '@/hooks/use-auth'
-import { TestDB } from '@/components/test-db'
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('tasks')
@@ -41,7 +40,6 @@ export default function DashboardPage() {
       case 'tasks':
         return (
           <div>
-            <TestDB />
             <TaskBoard />
           </div>
         )

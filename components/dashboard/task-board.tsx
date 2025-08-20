@@ -1,501 +1,462 @@
 "use client"
 
-/**
- * IMPORTANT: AUTO-DELETE FEATURE IS OPT-IN ONLY
- * 
- * Tasks will NEVER be automatically deleted unless:
- * 1. User explicitly checks the "Auto-delete" checkbox during task creation
- * 2. User sets a valid duration (greater than 0 hours)
- * 3. User confirms the auto-delete setting
- * 
- * By default, ALL tasks are permanent and will remain until manually deleted.
- */
-
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
-import { Plus, MoreVertical, Clock, User, Tag, Timer, Filter, Search, SortAsc, SortDesc, Download } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { TaskCard } from './task-card'
-import { CreateTaskModal } from './create-task-modal'
-import { TaskExport } from './task-export'
+import { useAuth } from '@/hooks/use-auth'
+import { TasksService, Task, CreateTaskData } from '@/lib/tasks-service'
 import { useToast } from '@/hooks/use-toast'
-import { showNotification } from '@/lib/notifications'
-
-interface Task {
-  id: string
-  title: string
-  description: string
-  project: string
-  duration: string
-  assignedOn: string
-  status: 'pending' | 'in-progress' | 'completed'
-  deadline: string
-  actualTime?: string
-  notes?: string
-  assignee: string
-  priority: 'low' | 'medium' | 'high'
-  autoDelete?: {
-    enabled: boolean
-    duration: number // in hours
-    createdAt?: string
-  }
-}
-
-const initialTasks: Task[] = [
-  {
-    id: '1',
-    title: 'Design User Interface',
-    description: 'Create modern UI components for the dashboard',
-    project: 'Frontend Development',
-    duration: '8 hours',
-    assignedOn: '2024-01-15',
-    status: 'in-progress',
-    deadline: '2024-01-20',
-    actualTime: '4 hours',
-    notes: 'Focus on accessibility and responsive design',
-    assignee: 'John Doe',
-    priority: 'high'
-    // No autoDelete - tasks should only auto-delete when explicitly enabled by user
-  },
-  {
-    id: '2',
-    title: 'API Integration',
-    description: 'Integrate backend APIs with frontend',
-    project: 'Backend Development',
-    duration: '6 hours',
-    assignedOn: '2024-01-16',
-    status: 'pending',
-    deadline: '2024-01-22',
-    assignee: 'Jane Smith',
-    priority: 'medium'
-  },
-  {
-    id: '3',
-    title: 'Database Schema Design',
-    description: 'Design and implement database structure',
-    project: 'Database',
-    duration: '4 hours',
-    assignedOn: '2024-01-14',
-    status: 'completed',
-    deadline: '2024-01-18',
-    actualTime: '3.5 hours',
-    assignee: 'Mike Johnson',
-    priority: 'high'
-  }
-]
-
-const columns = [
-  { id: 'pending', title: 'Pending', color: 'bg-yellow-500' },
-  { id: 'in-progress', title: 'In Progress', color: 'bg-blue-500' },
-  { id: 'completed', title: 'Completed', color: 'bg-green-500' }
-]
+import { supabase } from '@/lib/supabase'
 
 export function TaskBoard() {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks)
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('all')
-  const [sortBy, setSortBy] = useState<'deadline' | 'priority' | 'assignee' | 'created'>('deadline')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [newTask, setNewTask] = useState<CreateTaskData>({
+    title: '',
+    description: '',
+    priority: 'medium',
+    status: 'pending'
+  })
+  
+  const { user } = useAuth()
   const { toast } = useToast()
 
-
-
-  // Auto-delete effect - ONLY for tasks explicitly enabled by user during creation
+  // Load tasks from database
   useEffect(() => {
-    const checkAutoDelete = () => {
-      const now = new Date()
-      setTasks(prevTasks => {
-        const updatedTasks = prevTasks.filter(task => {
-          // CRITICAL: Only auto-delete if ALL conditions are met:
-          // 1. User explicitly enabled autoDelete during task creation
-          // 2. Task has autoDelete configuration with createdAt timestamp
-          // 3. The duration has actually passed
-          if (task.autoDelete?.enabled === true && 
-              task.autoDelete.createdAt && 
-              task.autoDelete.duration > 0) {
-            
-            const createdAt = new Date(task.autoDelete.createdAt)
-            const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60)
-            
-            if (hoursSinceCreation >= task.autoDelete.duration) {
-              // Show toast notification for auto-deleted task
-              toast({
-                title: "Task Auto-Deleted",
-                description: `"${task.title}" was automatically removed after ${task.autoDelete.duration} hours`,
-              })
-              return false // Remove the task
-            }
-          }
-          return true // Keep the task - this is the default behavior
-        })
-        return updatedTasks
+    if (user) {
+      loadTasks()
+    }
+  }, [user])
+
+  const loadTasks = async () => {
+    try {
+      setIsLoading(true)
+      console.log('🔄 Loading tasks from database...')
+      console.log('🔍 Current user:', user)
+      
+      const tasksData = await TasksService.getTasks()
+      console.log('✅ Tasks loaded:', tasksData)
+      console.log('📊 Tasks count:', tasksData?.length || 0)
+      
+      setTasks(tasksData || [])
+    } catch (error: any) {
+      console.error('❌ Failed to load tasks:', error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
       })
-    }
-
-    // Check every hour
-    const interval = setInterval(checkAutoDelete, 60 * 60 * 1000)
-    
-    // Initial check
-    checkAutoDelete()
-
-    return () => clearInterval(interval)
-  }, [toast])
-
-  const handleDragEnd = (result: any) => {
-    if (!result.destination) return
-
-    const { source, destination } = result
-    const sourceColumn = source.droppableId
-    const destColumn = destination.droppableId
-
-    if (sourceColumn === destColumn) {
-      // Reorder within same column
-      const columnTasks = tasks.filter(task => task.status === sourceColumn)
-      const [removed] = columnTasks.splice(source.index, 1)
-      const newTasks = tasks.filter(task => task.status !== sourceColumn)
-      
-      const updatedColumnTasks = [...columnTasks]
-      updatedColumnTasks.splice(destination.index, 0, removed)
-      
-      setTasks([...newTasks, ...updatedColumnTasks])
-    } else {
-      // Move to different column
-      const taskToMove = tasks.find(task => task.id === result.draggableId)
-      if (taskToMove) {
-        const updatedTask = { ...taskToMove, status: destColumn as Task['status'] }
-        setTasks(tasks.map(task => 
-          task.id === taskToMove.id ? updatedTask : task
-        ))
-        
-        toast({
-          title: "Task Updated",
-          description: `Task moved to ${destColumn}`,
-        })
-      }
-    }
-  }
-
-  const addTask = (newTask: Omit<Task, 'id' | 'assignedOn'> & { assignedOn?: string; autoDelete?: { enabled: boolean; duration: number } }) => {
-    // SAFETY CHECK: Ensure auto-delete is only enabled when user explicitly chooses it
-    const autoDeleteEnabled = newTask.autoDelete?.enabled === true && 
-                             newTask.autoDelete?.duration && 
-                             newTask.autoDelete.duration > 0
-    
-    const task: Task = {
-      ...newTask,
-      id: Date.now().toString(),
-      assignedOn: newTask.assignedOn || new Date().toISOString().split('T')[0],
-      // IMPORTANT: autoDelete is ONLY set if user explicitly enables it during task creation
-      // By default, tasks will NEVER auto-delete unless user checks the auto-delete option
-      autoDelete: autoDeleteEnabled ? {
-        enabled: true,
-        duration: newTask.autoDelete!.duration,
-        createdAt: new Date().toISOString()
-      } : undefined
-    }
-    setTasks([...tasks, task])
-    setIsCreateModalOpen(false)
-    
-    // Show notification with sound
-    showNotification("Task Created", `"${task.title}" has been assigned to ${task.assignee}`)
-    
-    if (task.autoDelete?.enabled) {
       toast({
-        title: "Task Created",
-        description: `New task will be automatically deleted after ${task.autoDelete.duration} hours`,
+        title: 'Error',
+        description: 'Failed to load tasks. Please try again.',
+        variant: 'destructive',
       })
-    } else {
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!user) {
       toast({
-        title: "Task Created",
-        description: "New task has been added successfully",
+        title: 'Error',
+        description: 'You must be logged in to create tasks.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      console.log('🔄 Creating task:', newTask, 'for user:', user.id)
+      const createdTask = await TasksService.createTask(newTask, user.id)
+      console.log('✅ Task created successfully:', createdTask)
+      
+      // Reload tasks from database instead of just adding to local state
+      await loadTasks()
+      
+      setNewTask({ title: '', description: '', priority: 'medium', status: 'pending' })
+      setShowCreateForm(false)
+      
+      toast({
+        title: 'Success',
+        description: 'Task created successfully!',
+      })
+    } catch (error) {
+      console.error('❌ Failed to create task:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to create task. Please try again.',
+        variant: 'destructive',
       })
     }
   }
 
-  const deleteTask = (taskId: string) => {
-    setTasks(tasks.filter(task => task.id !== taskId))
-    toast({
-      title: "Task Deleted",
-      description: "Task has been removed",
-    })
+  const handleUpdateTask = async (taskId: string, updates: Partial<CreateTaskData>) => {
+    try {
+      console.log('🔄 Updating task:', taskId, 'with:', updates)
+      const updatedTask = await TasksService.updateTask(taskId, updates)
+      console.log('✅ Task updated successfully:', updatedTask)
+      
+      // Reload tasks from database
+      await loadTasks()
+      
+      toast({
+        title: 'Success',
+        description: 'Task updated successfully!',
+      })
+    } catch (error) {
+      console.error('❌ Failed to update task:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update task. Please try again.',
+        variant: 'destructive',
+      })
+    }
   }
 
-  const updateTask = (taskId: string, updates: Partial<Task>) => {
-    setTasks(tasks.map(task => 
-      task.id === taskId ? { ...task, ...updates } : task
-    ))
-    toast({
-      title: "Task Updated",
-      description: "Task has been updated successfully",
-    })
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      console.log('🔄 Deleting task:', taskId)
+      await TasksService.deleteTask(taskId)
+      console.log('✅ Task deleted successfully')
+      
+      // Reload tasks from database
+      await loadTasks()
+      
+      toast({
+        title: 'Success',
+        description: 'Task deleted successfully!',
+      })
+    } catch (error) {
+      console.error('❌ Failed to delete task:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to delete task. Please try again.',
+        variant: 'destructive',
+      })
+    }
   }
 
-  // Filter and sort tasks
-  const filteredAndSortedTasks = tasks
-    .filter(task => {
-      const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           task.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           task.assignee.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           task.project.toLowerCase().includes(searchTerm.toLowerCase())
-      
-      const matchesCategory = selectedCategory === 'all' || task.project === selectedCategory
-      
-      return matchesSearch && matchesCategory
-    })
-    .sort((a, b) => {
-      let comparison = 0
-      
-      switch (sortBy) {
-        case 'deadline':
-          comparison = new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
-          break
-        case 'priority':
-          const priorityOrder = { high: 3, medium: 2, low: 1 }
-          comparison = priorityOrder[a.priority] - priorityOrder[b.priority]
-          break
-        case 'assignee':
-          comparison = a.assignee.localeCompare(b.assignee)
-          break
-        case 'created':
-          comparison = new Date(a.assignedOn).getTime() - new Date(b.assignedOn).getTime()
-          break
-      }
-      
-      return sortOrder === 'asc' ? comparison : -comparison
-    })
-
-  // Get unique categories from tasks
-  const categories = ['all', ...Array.from(new Set(tasks.map(task => task.project)))]
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-             {/* Header */}
-       <div className="flex items-center justify-between mb-6">
-         <div>
-           <h1 className="text-3xl font-bold">Task Board</h1>
-           <p className="text-muted-foreground">Manage and track your team's tasks</p>
-         </div>
-         <div className="flex items-center space-x-3">
-           <Button onClick={() => setIsExportModalOpen(true)} variant="outline">
-             <Download className="h-4 w-4 mr-2" />
-             Export
-           </Button>
-           <Button onClick={() => setIsCreateModalOpen(true)} variant="neon">
-             <Plus className="h-4 w-4 mr-2" />
-             New Task
-           </Button>
-         </div>
-       </div>
-
-       {/* Search, Filter, and Sort Controls */}
-       <div className="bg-card border rounded-lg p-4 mb-6">
-         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-           {/* Search */}
-           <div className="relative">
-             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-             <Input
-               placeholder="Search tasks..."
-               value={searchTerm}
-               onChange={(e) => setSearchTerm(e.target.value)}
-               className="pl-10"
-             />
-           </div>
-
-           {/* Category Filter */}
-           <select
-             value={selectedCategory}
-             onChange={(e) => setSelectedCategory(e.target.value)}
-             className="px-3 py-2 border rounded-md bg-background text-sm"
-           >
-             {categories.map(category => (
-               <option key={category} value={category}>
-                 {category === 'all' ? 'All Categories' : category}
-               </option>
-             ))}
-           </select>
-
-           {/* Sort By */}
-           <select
-             value={sortBy}
-             onChange={(e) => setSortBy(e.target.value as any)}
-             className="px-3 py-2 border rounded-md bg-background text-sm"
-           >
-             <option value="deadline">Sort by Deadline</option>
-             <option value="priority">Sort by Priority</option>
-             <option value="assignee">Sort by Assignee</option>
-             <option value="created">Sort by Created Date</option>
-           </select>
-
-           {/* Sort Order */}
-           <Button
-             variant="outline"
-             size="sm"
-             onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-             className="flex items-center space-x-2"
-           >
-             {sortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
-             <span>{sortOrder === 'asc' ? 'Ascending' : 'Descending'}</span>
-           </Button>
-         </div>
-       </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        {columns.map((column) => {
-          const columnTasks = tasks.filter(task => task.status === column.id)
-          const count = columnTasks.length
-          
-          return (
-            <motion.div
-              key={column.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-card border rounded-lg p-4"
-            >
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${column.color}`} />
-                <span className="text-sm font-medium text-muted-foreground">
-                  {column.title}
-                </span>
-              </div>
-              <div className="text-2xl font-bold mt-2">{count}</div>
-            </motion.div>
-          )
-        })}
-        
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-card border rounded-lg p-4"
-        >
-          <div className="flex items-center space-x-2">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">
-              Total Tasks
-            </span>
-          </div>
-          <div className="text-2xl font-bold mt-2">{tasks.length}</div>
-        </motion.div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-card border rounded-lg p-4"
-        >
-          <div className="flex items-center space-x-2">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">
-              Active Timers
-            </span>
-          </div>
-          <div className="text-2xl font-bold mt-2 text-green-600">
-            {tasks.filter(task => task.status === 'in-progress').length}
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-card border rounded-lg p-4"
-        >
-          <div className="flex items-center space-x-2">
-            <Timer className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">
-              Auto-Delete Tasks
-            </span>
-          </div>
-          <div className="text-2xl font-bold mt-2 text-orange-600">
-            {tasks.filter(task => task.autoDelete?.enabled).length}
-          </div>
-        </motion.div>
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-white">Task Board</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={loadTasks}
+            disabled={isLoading}
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50"
+          >
+            {isLoading ? 'Loading...' : 'Refresh'}
+          </button>
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="bg-neon-blue text-white px-4 py-2 rounded-lg hover:bg-neon-blue/90"
+          >
+            {showCreateForm ? 'Cancel' : 'Create Task'}
+          </button>
+        </div>
       </div>
 
-      {/* Kanban Board */}
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {columns.map((column) => (
-            <div key={column.id} className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${column.color}`} />
-                <h3 className="font-semibold">{column.title}</h3>
-                <span className="text-sm text-muted-foreground">
-                  ({tasks.filter(task => task.status === column.id).length})
-                </span>
-              </div>
-              
-              <Droppable droppableId={column.id}>
-                {(provided: any, snapshot: any) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className={`min-h-[500px] p-4 rounded-lg border-2 border-dashed transition-colors ${
-                      snapshot.isDraggingOver 
-                        ? 'border-primary bg-primary/5' 
-                        : 'border-muted bg-muted/20'
-                    }`}
-                  >
-                                         {filteredAndSortedTasks
-                       .filter(task => task.status === column.id)
-                       .map((task, index) => (
-                        <Draggable key={task.id} draggableId={task.id} index={index}>
-                          {(provided: any, snapshot: any) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              style={{
-                                ...provided.draggableProps.style,
-                                transform: snapshot.isDragging 
-                                  ? provided.draggableProps.style?.transform 
-                                  : 'none'
-                              }}
-                            >
-                              <TaskCard
-                                task={task}
-                                onDelete={deleteTask}
-                                onUpdate={updateTask}
-                              />
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </div>
-          ))}
+      {/* Debug Info */}
+      <div className="bg-gray-800/50 p-4 rounded-lg text-sm">
+        <div className="text-gray-300 mb-2">Debug Info:</div>
+        <div className="grid grid-cols-2 gap-4 text-xs">
+          <div>
+            <span className="text-gray-400">User ID:</span> {user?.id || 'Not logged in'}
+          </div>
+          <div>
+            <span className="text-gray-400">Tasks Count:</span> {tasks.length}
+          </div>
+          <div>
+            <span className="text-gray-400">Loading:</span> {isLoading ? 'Yes' : 'No'}
+          </div>
+          <div>
+            <span className="text-gray-400">Last Updated:</span> {new Date().toLocaleTimeString()}
+          </div>
         </div>
-      </DragDropContext>
+        <div className="mt-3 space-y-2">
+          <button
+            onClick={async () => {
+              console.log('🧪 Testing database connection...')
+              try {
+                const { data, error } = await supabase.from('tasks').select('*').limit(5)
+                console.log('🧪 Direct Supabase query result:', { data, error })
+                if (error) throw error
+                alert(`Database test successful! Found ${data?.length || 0} tasks.`)
+              } catch (err: any) {
+                console.error('🧪 Database test failed:', err)
+                alert(`Database test failed: ${err.message}`)
+              }
+            }}
+            className="bg-yellow-600 text-white px-3 py-1 rounded text-xs hover:bg-yellow-700 mr-2"
+          >
+            Test DB Connection
+          </button>
+          <button
+            onClick={async () => {
+              console.log('🔍 Checking if tasks table exists...')
+              try {
+                // Try to get table info
+                const { data, error } = await supabase
+                  .from('tasks')
+                  .select('*')
+                  .limit(1)
+                
+                if (error) {
+                  if (error.message.includes('does not exist')) {
+                    alert('❌ Tasks table does not exist! You need to create it in Supabase.')
+                  } else {
+                    alert(`❌ Table access error: ${error.message}`)
+                  }
+                } else {
+                  alert(`✅ Tasks table exists and accessible!`)
+                }
+                
+                console.log('🔍 Table check result:', { data, error })
+              } catch (err: any) {
+                console.error('🔍 Table check failed:', err)
+                alert(`Table check failed: ${err.message}`)
+              }
+            }}
+            className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 mr-2"
+          >
+            Check Table
+          </button>
+          <button
+            onClick={async () => {
+              console.log('📊 Checking database schema...')
+              try {
+                // Try to get all tables
+                const { data, error } = await supabase
+                  .from('information_schema.tables')
+                  .select('table_name')
+                  .eq('table_schema', 'public')
+                
+                if (error) {
+                  alert(`❌ Schema check failed: ${error.message}`)
+                } else {
+                  const tableNames = data?.map(t => t.table_name).join(', ')
+                  alert(`📊 Available tables: ${tableNames || 'None'}`)
+                }
+                
+                console.log('📊 Schema check result:', { data, error })
+              } catch (err: any) {
+                console.error('📊 Schema check failed:', err)
+                alert(`Schema check failed: ${err.message}`)
+              }
+            }}
+            className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 mr-2"
+          >
+            Check Schema
+          </button>
+          <button
+            onClick={async () => {
+              if (!user) {
+                alert('❌ You must be logged in to create test tasks')
+                return
+              }
+              
+              console.log('🧪 Creating test task...')
+              try {
+                const testTask = {
+                  title: 'Test Task - ' + new Date().toLocaleTimeString(),
+                  description: 'This is a test task to verify database connection',
+                  priority: 'medium' as const,
+                  status: 'pending' as const,
+                  progress: 0
+                }
+                
+                console.log('🧪 Test task data:', testTask)
+                console.log('🧪 User ID:', user.id)
+                
+                // Try direct Supabase insert first
+                const { data, error } = await supabase
+                  .from('tasks')
+                  .insert({
+                    title: testTask.title,
+                    description: testTask.description,
+                    priority: testTask.priority,
+                    status: testTask.status,
+                    progress: testTask.progress,
+                    created_by: user.id,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
+                  .select()
+                  .single()
+                
+                if (error) {
+                  console.error('🧪 Test task creation failed:', error)
+                  alert(`❌ Test task creation failed: ${error.message}`)
+                  
+                  // Try to get more details about the error
+                  if (error.message.includes('RLS')) {
+                    alert('🔒 This looks like a Row Level Security (RLS) policy issue. You may need to create RLS policies for the tasks table.')
+                  }
+                } else {
+                  console.log('🧪 Test task created successfully:', data)
+                  alert(`✅ Test task created successfully! ID: ${data.id}`)
+                  // Reload tasks
+                  await loadTasks()
+                }
+              } catch (err: any) {
+                console.error('🧪 Test task creation failed:', err)
+                alert(`Test task creation failed: ${err.message}`)
+              }
+            }}
+            className="bg-purple-600 text-white px-3 py-1 rounded text-xs hover:bg-purple-700"
+          >
+            Create Test Task
+          </button>
+        </div>
+      </div>
 
-                     {/* Create Task Modal */}
-        <AnimatePresence>
-          {isCreateModalOpen && (
-            <CreateTaskModal
-              isOpen={isCreateModalOpen}
-              onClose={() => setIsCreateModalOpen(false)}
-              onSubmit={addTask}
-              existingTasks={tasks}
+      {/* Create Task Form */}
+      {showCreateForm && (
+        <form onSubmit={handleCreateTask} className="bg-white/5 p-6 rounded-lg space-y-4">
+          <div>
+            <label htmlFor="task-title" className="block text-white text-sm font-medium mb-2">
+              Task Title
+            </label>
+            <input
+              id="task-title"
+              type="text"
+              value={newTask.title}
+              onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
+              required
             />
-          )}
-        </AnimatePresence>
+          </div>
+          
+          <div>
+            <label htmlFor="task-description" className="block text-white text-sm font-medium mb-2">
+              Description
+            </label>
+            <textarea
+              id="task-description"
+              value={newTask.description}
+              onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
+              rows={3}
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="task-priority" className="block text-white text-sm font-medium mb-2">
+                Priority
+              </label>
+              <select
+                id="task-priority"
+                value={newTask.priority}
+                onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as any })}
+                className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            
+            <div>
+              <label htmlFor="task-status" className="block text-white text-sm font-medium mb-2">
+                Status
+              </label>
+              <select
+                id="task-status"
+                value={newTask.status}
+                onChange={(e) => setNewTask({ ...newTask, status: e.target.value as any })}
+                className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
+              >
+                <option value="pending">Pending</option>
+                <option value="in-progress">In Progress</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+          </div>
+          
+          <button
+            type="submit"
+            className="w-full bg-neon-blue text-white py-3 rounded-lg hover:bg-neon-blue/90"
+          >
+            Create Task
+          </button>
+        </form>
+      )}
 
-               {/* Export Modal */}
-        <AnimatePresence>
-          {isExportModalOpen && (
-            <TaskExport
-              tasks={tasks}
-              onClose={() => setIsExportModalOpen(false)}
-            />
-          )}
-        </AnimatePresence>
+      {/* Tasks List */}
+      <div className="space-y-4">
+        {tasks.length === 0 ? (
+          <div className="text-center py-8 text-gray-400">
+            No tasks found. Create your first task!
+          </div>
+        ) : (
+          tasks.map((task) => (
+            <div
+              key={task.id}
+              className="bg-white/5 p-6 rounded-lg border border-white/10"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{task.title}</h3>
+                  {task.description && (
+                    <p className="text-gray-300 mt-2">{task.description}</p>
+                  )}
+                  <div className="flex gap-4 mt-3">
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      task.priority === 'high' ? 'bg-red-500/20 text-red-400' :
+                      task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-green-500/20 text-green-400'
+                    }`}>
+                      {task.priority}
+                    </span>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                      task.status === 'in-progress' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      {task.status}
+                    </span>
+                    <span className="text-gray-400 text-xs">
+                      Progress: {task.progress}%
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleUpdateTask(task.id, { 
+                      status: task.status === 'pending' ? 'in-progress' : 
+                              task.status === 'in-progress' ? 'completed' : 'pending'
+                    })}
+                    className="text-neon-blue hover:text-neon-blue/80 text-sm"
+                  >
+                    {task.status === 'pending' ? 'Start' :
+                     task.status === 'in-progress' ? 'Complete' : 'Reset'}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTask(task.id)}
+                    className="text-red-400 hover:text-red-300 text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
