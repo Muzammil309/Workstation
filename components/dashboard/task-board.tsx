@@ -5,17 +5,12 @@ import { useAuth } from '@/hooks/use-auth'
 import { TasksService, Task, CreateTaskData } from '@/lib/tasks-service'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
+import { CreateTaskModal } from './create-task-modal'
 
 export function TaskBoard() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [newTask, setNewTask] = useState<CreateTaskData>({
-    title: '',
-    description: '',
-    priority: 'medium',
-    status: 'pending'
-  })
+  const [showCreateModal, setShowCreateModal] = useState(false)
   
   const { user } = useAuth()
   const { toast } = useToast()
@@ -68,9 +63,7 @@ export function TaskBoard() {
     }
   }
 
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+  const handleCreateTask = async (taskData: any) => {
     if (!user) {
       toast({
         title: 'Error',
@@ -81,17 +74,17 @@ export function TaskBoard() {
     }
 
     try {
-      console.log('🔄 Creating task:', newTask, 'for user:', user.id)
+      console.log('🔄 Creating task from modal:', taskData, 'for user:', user.id)
       
-      // Bypass TasksService and use direct Supabase call
+      // Use direct Supabase call with modal data
       console.log('🔄 Using direct Supabase insertion...')
       const { data, error } = await supabase
         .from('tasks')
         .insert({
-          title: newTask.title,
-          description: newTask.description || '',
-          status: newTask.status || 'pending',
-          priority: newTask.priority || 'medium',
+          title: taskData.title,
+          description: taskData.description || '',
+          status: taskData.status || 'pending',
+          priority: taskData.priority || 'medium',
           progress: 0,
           created_by: user.id,
           created_at: new Date().toISOString(),
@@ -110,8 +103,8 @@ export function TaskBoard() {
       // Reload tasks from database
       await loadTasks()
       
-      setNewTask({ title: '', description: '', priority: 'medium', status: 'pending' })
-      setShowCreateForm(false)
+      // Close modal
+      setShowCreateModal(false)
       
       toast({
         title: 'Success',
@@ -195,10 +188,10 @@ export function TaskBoard() {
             {isLoading ? 'Loading...' : 'Refresh'}
           </button>
           <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
+            onClick={() => setShowCreateModal(true)}
             className="bg-neon-blue text-white px-4 py-2 rounded-lg hover:bg-neon-blue/90"
           >
-            {showCreateForm ? 'Cancel' : 'Create Task'}
+            Create Task
           </button>
         </div>
       </div>
@@ -357,78 +350,17 @@ export function TaskBoard() {
         </div>
       </div>
 
-      {/* Create Task Form */}
-      {showCreateForm && (
-        <form onSubmit={handleCreateTask} className="bg-white/5 p-6 rounded-lg space-y-4">
-          <div>
-            <label htmlFor="task-title" className="block text-white text-sm font-medium mb-2">
-              Task Title
-            </label>
-            <input
-              id="task-title"
-              type="text"
-              value={newTask.title}
-              onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
-              required
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="task-description" className="block text-white text-sm font-medium mb-2">
-              Description
-            </label>
-            <textarea
-              id="task-description"
-              value={newTask.description}
-              onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
-              rows={3}
-            />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="task-priority" className="block text-white text-sm font-medium mb-2">
-                Priority
-              </label>
-              <select
-                id="task-priority"
-                value={newTask.priority}
-                onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as any })}
-                className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div>
-            
-            <div>
-              <label htmlFor="task-status" className="block text-white text-sm font-medium mb-2">
-                Status
-              </label>
-              <select
-                id="task-status"
-                value={newTask.status}
-                onChange={(e) => setNewTask({ ...newTask, status: e.target.value as any })}
-                className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white"
-              >
-                <option value="pending">Pending</option>
-                <option value="in-progress">In Progress</option>
-                <option value="completed">Completed</option>
-              </select>
-            </div>
-          </div>
-          
-          <button
-            type="submit"
-            className="w-full bg-neon-blue text-white py-3 rounded-lg hover:bg-neon-blue/90"
-          >
-            Create Task
-          </button>
-        </form>
-      )}
+      {/* Create Task Modal */}
+      <CreateTaskModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreateTask}
+        existingTasks={tasks.map(task => ({
+          id: task.id,
+          title: task.title,
+          status: task.status
+        }))}
+      />
 
       {/* Tasks List */}
       <div className="space-y-4">
