@@ -21,7 +21,7 @@ interface Project {
   budget: string
   priority: 'low' | 'medium' | 'high'
   tasksCount: number
-  completedTasks: number
+  completedtasks: number
   created_by: string
   created_at: string
 }
@@ -108,7 +108,7 @@ export function ProjectsPanel() {
         priority: newProject.priority,
         progress: 0,
         tasksCount: 0,
-        completedTasks: 0,
+        completedtasks: 0,
         created_by: user?.id,
         created_at: new Date().toISOString()
       }
@@ -414,7 +414,7 @@ export function ProjectsPanel() {
 
             {/* Tasks Summary */}
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Tasks: {project.completedTasks}/{project.tasksCount}</span>
+                              <span className="text-muted-foreground">Tasks: {project.completedtasks}/{project.tasksCount}</span>
               <span className="text-muted-foreground">Created {new Date(project.created_at).toLocaleDateString()}</span>
             </div>
           </motion.div>
