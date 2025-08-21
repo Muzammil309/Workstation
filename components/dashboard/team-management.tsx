@@ -18,6 +18,7 @@ interface TeamMember {
   status: 'active' | 'inactive'
   created_at: string
   updated_at: string
+  skills?: string[] // Added skills field
 }
 
 const departments = [
@@ -48,7 +49,8 @@ export function TeamManagement() {
     role: 'user' as 'user' | 'admin',
     department: '',
     customDepartment: '',
-    status: 'active' as 'active' | 'inactive'
+    status: 'active' as 'active' | 'inactive',
+    skills: [] as string[]
   })
   
   const { toast } = useToast()
@@ -140,6 +142,7 @@ export function TeamManagement() {
             role: newMember.role,
             department: finalDepartment,
             status: newMember.status,
+            skills: newMember.skills,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
@@ -178,6 +181,7 @@ export function TeamManagement() {
           role: editingMember.role,
           department: editingMember.department,
           status: editingMember.status,
+          skills: editingMember.skills,
           updated_at: new Date().toISOString()
         })
         .eq('id', editingMember.id)
@@ -245,7 +249,8 @@ export function TeamManagement() {
       role: 'user',
       department: '',
       customDepartment: '',
-      status: 'active'
+      status: 'active',
+      skills: []
     })
   }
 
@@ -391,6 +396,25 @@ export function TeamManagement() {
                   {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
                 </span>
               </div>
+
+              {/* Skills Section */}
+              <div className="mt-3">
+                <span className="text-sm text-muted-foreground block mb-2">Skills:</span>
+                <div className="flex flex-wrap gap-1">
+                  {(member.skills || []).length > 0 ? (
+                    (member.skills || []).map((skill, index) => (
+                      <span
+                        key={index}
+                        className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-full"
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">No skills listed</span>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Action Buttons */}
@@ -515,6 +539,20 @@ export function TeamManagement() {
                     <option value="inactive">Inactive</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Skills</label>
+                  <Input
+                    value={(newMember.skills || []).join(', ')}
+                    onChange={(e) => setNewMember({ 
+                      ...newMember, 
+                      skills: e.target.value.split(',').map(s => s.trim()).filter(s => s.length > 0)
+                    })}
+                    placeholder="React, TypeScript, Node.js (separate with commas)"
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Separate skills with commas</p>
+                </div>
               </div>
               
               <div className="flex space-x-3 mt-6">
@@ -617,6 +655,20 @@ export function TeamManagement() {
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Skills</label>
+                  <Input
+                    value={(editingMember.skills || []).join(', ')}
+                    onChange={(e) => setEditingMember({ 
+                      ...editingMember, 
+                      skills: e.target.value.split(',').map(s => s.trim()).filter(s => s.length > 0)
+                    })}
+                    placeholder="React, TypeScript, Node.js (separate with commas)"
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Separate skills with commas</p>
                 </div>
               </div>
               
