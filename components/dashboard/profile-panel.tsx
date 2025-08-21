@@ -24,6 +24,7 @@ interface ProfileData {
   preferences?: {
     theme: 'light' | 'dark' | 'system'
     notifications: boolean
+    emailUpdates?: boolean
     language: string
   }
   created_at: string
@@ -66,6 +67,7 @@ export function ProfilePanel() {
         preferences: data.preferences || {
           theme: 'system',
           notifications: true,
+          emailUpdates: false,
           language: 'en'
         }
       }
@@ -264,50 +266,76 @@ export function ProfilePanel() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-6"
+            className="space-y-6"
           >
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Full Name</label>
-                <Input
-                  value={editedProfile.name || ''}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  disabled={!isEditing}
-                  className="mt-1"
-                />
+            {/* Basic Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Full Name</label>
+                  <Input
+                    value={editedProfile.name || ''}
+                    onChange={(e) => handleInputChange('name', e.target.value)}
+                    disabled={!isEditing}
+                    className="mt-1"
+                    placeholder="Enter your full name"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Email</label>
+                  <Input
+                    value={editedProfile.email || ''}
+                    disabled
+                    className="mt-1 bg-muted"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Email cannot be changed</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Phone</label>
+                  <Input
+                    value={editedProfile.phone || ''}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    disabled={!isEditing}
+                    className="mt-1"
+                    placeholder="+1 (555) 123-4567"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Email</label>
-                <Input
-                  value={editedProfile.email || ''}
-                  disabled
-                  className="mt-1 bg-muted"
-                />
-                <p className="text-xs text-muted-foreground mt-1">Email cannot be changed</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Phone</label>
-                <Input
-                  value={editedProfile.phone || ''}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  disabled={!isEditing}
-                  className="mt-1"
-                  placeholder="+1 (555) 123-4567"
-                />
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Location</label>
+                  <Input
+                    value={editedProfile.location || ''}
+                    onChange={(e) => handleInputChange('location', e.target.value)}
+                    disabled={!isEditing}
+                    className="mt-1"
+                    placeholder="City, Country"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Department</label>
+                  <Input
+                    value={editedProfile.department || ''}
+                    disabled
+                    className="mt-1 bg-muted"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Department is managed by admin</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Status</label>
+                  <Input
+                    value={editedProfile.status || ''}
+                    disabled
+                    className="mt-1 bg-muted"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Status is managed by admin</p>
+                </div>
               </div>
             </div>
 
+            {/* Bio and Skills */}
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Location</label>
-                <Input
-                  value={editedProfile.location || ''}
-                  onChange={(e) => handleInputChange('location', e.target.value)}
-                  disabled={!isEditing}
-                  className="mt-1"
-                  placeholder="City, Country"
-                />
-              </div>
               <div>
                 <label className="text-sm font-medium">Bio</label>
                 <textarea
@@ -315,22 +343,54 @@ export function ProfilePanel() {
                   onChange={(e) => handleInputChange('bio', e.target.value)}
                   disabled={!isEditing}
                   className="mt-1 w-full px-3 py-2 border rounded-md bg-background disabled:bg-muted"
-                  rows={3}
-                  placeholder="Tell us about yourself..."
+                  rows={4}
+                  placeholder="Tell us about yourself, your experience, and what you're passionate about..."
                 />
+                <p className="text-xs text-muted-foreground mt-1">Share your story and professional background</p>
               </div>
+              
               <div>
                 <label className="text-sm font-medium">Skills</label>
                 <Input
                   value={editedProfile.skills?.join(', ') || ''}
-                  onChange={(e) => handleInputChange('skills', e.target.value.split(',').map(s => s.trim()))}
+                  onChange={(e) => handleInputChange('skills', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                   disabled={!isEditing}
                   className="mt-1"
-                  placeholder="React, TypeScript, Node.js"
+                  placeholder="React, TypeScript, Node.js, Project Management, Leadership"
                 />
-                <p className="text-xs text-muted-foreground mt-1">Separate skills with commas</p>
+                <p className="text-xs text-muted-foreground mt-1">Separate skills with commas. Add both technical and soft skills.</p>
               </div>
             </div>
+
+            {/* Skills Preview */}
+            {editedProfile.skills && editedProfile.skills.length > 0 && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Skills Preview</label>
+                <div className="flex flex-wrap gap-2">
+                  {editedProfile.skills.map((skill, index) => {
+                    const skillColors = [
+                      'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+                      'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+                      'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
+                      'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
+                      'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300',
+                      'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+                      'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300',
+                      'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                    ]
+                    const colorIndex = index % skillColors.length
+                    return (
+                      <span
+                        key={index}
+                        className={`px-3 py-1 text-sm rounded-full ${skillColors[colorIndex]}`}
+                      >
+                        {skill}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -355,6 +415,7 @@ export function ProfilePanel() {
                   <option value="dark">Dark</option>
                   <option value="system">System</option>
                 </select>
+                <p className="text-xs text-muted-foreground mt-1">Choose your preferred color scheme</p>
               </div>
               <div>
                 <label className="text-sm font-medium">Language</label>
@@ -370,8 +431,45 @@ export function ProfilePanel() {
                   <option value="es">Spanish</option>
                   <option value="fr">French</option>
                   <option value="de">German</option>
+                  <option value="ar">Arabic</option>
+                  <option value="zh">Chinese</option>
+                  <option value="hi">Hindi</option>
+                  <option value="ur">Urdu</option>
                 </select>
+                <p className="text-xs text-muted-foreground mt-1">Select your preferred language</p>
               </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="notifications"
+                  className="h-4 w-4 text-primary rounded"
+                  checked={editedProfile.preferences?.notifications || false}
+                  onChange={(e) => handleInputChange('preferences', {
+                    notifications: e.target.checked
+                  })}
+                  disabled={!isEditing}
+                />
+                <label htmlFor="notifications" className="text-sm font-medium">Enable Notifications</label>
+              </div>
+              <p className="text-xs text-muted-foreground">Receive updates about tasks, projects, and team activities</p>
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="emailUpdates"
+                  className="h-4 w-4 text-primary rounded"
+                  checked={editedProfile.preferences?.emailUpdates || false}
+                  onChange={(e) => handleInputChange('preferences', {
+                    emailUpdates: e.target.checked
+                  })}
+                  disabled={!isEditing}
+                />
+                <label htmlFor="emailUpdates" className="text-sm font-medium">Email Updates</label>
+              </div>
+              <p className="text-xs text-muted-foreground">Get important updates delivered to your email</p>
             </div>
           </motion.div>
         )}
