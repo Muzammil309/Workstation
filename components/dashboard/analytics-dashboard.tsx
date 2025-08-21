@@ -24,12 +24,25 @@ interface UserTaskData {
 }
 
 // Initialize empty array - will be populated with real data
-const [userTaskData, setUserTaskData] = useState<UserTaskData[]>([])
+// Note: useState can only be used inside React components
 
-const taskStatusData = [
-  { name: 'Pending', value: 12, color: '#f59e0b' },
-  { name: 'In Progress', value: 8, color: '#3b82f6' },
-  { name: 'Completed', value: 25, color: '#10b981' }
+// Task status data will be calculated dynamically from userTaskData
+const getTaskStatusData = (userData: UserTaskData[]) => [
+  { 
+    name: 'Pending', 
+    value: userData.reduce((sum, user) => sum + user.pendingTasks, 0), 
+    color: '#f59e0b' 
+  },
+  { 
+    name: 'In Progress', 
+    value: userData.reduce((sum, user) => sum + user.inProgressTasks, 0), 
+    color: '#3b82f6' 
+  },
+  { 
+    name: 'Completed', 
+    value: userData.reduce((sum, user) => sum + user.completedTasks, 0), 
+    color: '#10b981' 
+  }
 ]
 
 const weeklyProgressData = [
@@ -145,7 +158,7 @@ export function AnalyticsDashboard() {
   const stats = [
     {
       title: 'Total Tasks',
-      value: '45',
+      value: userTaskData.reduce((sum, user) => sum + user.totalTasks, 0).toString(),
       change: '+12%',
       changeType: 'positive',
       icon: Target,
@@ -153,7 +166,7 @@ export function AnalyticsDashboard() {
     },
     {
       title: 'Completed',
-      value: '25',
+      value: userTaskData.reduce((sum, user) => sum + user.completedTasks, 0).toString(),
       change: '+8%',
       changeType: 'positive',
       icon: CheckCircle,
@@ -161,7 +174,7 @@ export function AnalyticsDashboard() {
     },
     {
       title: 'In Progress',
-      value: '8',
+      value: userTaskData.reduce((sum, user) => sum + user.inProgressTasks, 0).toString(),
       change: '-3%',
       changeType: 'negative',
       icon: Clock,
@@ -169,7 +182,7 @@ export function AnalyticsDashboard() {
     },
     {
       title: 'Team Members',
-      value: '12',
+      value: userTaskData.length.toString(),
       change: '+2',
       changeType: 'positive',
       icon: Users,
@@ -382,7 +395,7 @@ export function AnalyticsDashboard() {
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={taskStatusData}
+                data={getTaskStatusData(userTaskData)}
                 cx="50%"
                 cy="50%"
                 innerRadius={60}
@@ -390,7 +403,7 @@ export function AnalyticsDashboard() {
                 paddingAngle={5}
                 dataKey="value"
               >
-                {taskStatusData.map((entry, index) => (
+                {getTaskStatusData(userTaskData).map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -398,7 +411,7 @@ export function AnalyticsDashboard() {
             </PieChart>
           </ResponsiveContainer>
           <div className="flex justify-center space-x-4 mt-4">
-            {taskStatusData.map((item) => (
+            {getTaskStatusData(userTaskData).map((item) => (
               <div key={item.name} className="flex items-center space-x-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                 <span className="text-sm text-muted-foreground">{item.name}</span>
