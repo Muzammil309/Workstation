@@ -404,7 +404,13 @@ export function CalendarView() {
             const isToday = day && day.getDate() === todayPakistan.getDate() && 
                            day.getMonth() === todayPakistan.getMonth() && 
                            day.getFullYear() === todayPakistan.getFullYear()
-            const isOverdue = day && day < todayPakistan
+            
+            // Only highlight as overdue if there are actual overdue tasks on this date
+            const tasksForDate = day ? getTasksForDate(formatDate(day)) : []
+            const hasOverdueTasks = tasksForDate.some(task => {
+              const taskDate = new Date(task.deadline)
+              return taskDate < todayPakistan && task.status !== 'completed'
+            })
             
             return (
               <div
@@ -414,7 +420,7 @@ export function CalendarView() {
                 } ${
                   isToday ? 'ring-2 ring-blue-500 ring-opacity-50 bg-blue-50 dark:bg-blue-950/20' : ''
                 } ${
-                  isOverdue ? 'bg-red-50 dark:bg-red-950/20' : ''
+                  hasOverdueTasks ? 'bg-red-50 dark:bg-red-950/20' : ''
                 }`}
               >
                 {day && (
@@ -422,7 +428,7 @@ export function CalendarView() {
                     <div className={`text-sm font-medium mb-2 ${
                       isToday 
                         ? 'bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto' 
-                        : isOverdue
+                        : hasOverdueTasks
                         ? 'bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto'
                         : ''
                     }`}>
@@ -430,7 +436,7 @@ export function CalendarView() {
                     </div>
                     <div className="space-y-1">
                       {/* Show task deadlines */}
-                      {getTasksForDate(formatDate(day)).slice(0, 3).map(task => (
+                      {tasksForDate.slice(0, 3).map(task => (
                         <div
                           key={task.id}
                           className={`text-xs p-1 rounded cursor-pointer text-white truncate border-l-2 ${priorityColors[task.priority]} ${
@@ -443,9 +449,9 @@ export function CalendarView() {
                       ))}
                       
                       {/* Show total count if more than 3 tasks */}
-                      {getTasksForDate(formatDate(day)).length > 3 && (
+                      {tasksForDate.length > 3 && (
                         <div className="text-xs text-muted-foreground">
-                          +{getTasksForDate(formatDate(day)).length - 3} more
+                          +{tasksForDate.length - 3} more
                         </div>
                       )}
                     </div>

@@ -55,8 +55,23 @@ export function ProfilePanel() {
         .single()
 
       if (error) throw error
-      setProfile(data)
-      setEditedProfile(data)
+      
+      // Set default values for missing fields
+      const profileData = {
+        ...data,
+        phone: data.phone || '',
+        location: data.location || '',
+        bio: data.bio || '',
+        skills: data.skills || [],
+        preferences: data.preferences || {
+          theme: 'system',
+          notifications: true,
+          language: 'en'
+        }
+      }
+      
+      setProfile(profileData)
+      setEditedProfile(profileData)
     } catch (error: any) {
       console.error('Error loading profile:', error)
       toast({
@@ -71,12 +86,20 @@ export function ProfilePanel() {
 
   const handleSave = async () => {
     try {
+      // Prepare the data for update, excluding fields that shouldn't be updated
+      const updateData = {
+        name: editedProfile.name,
+        phone: editedProfile.phone,
+        location: editedProfile.location,
+        bio: editedProfile.bio,
+        skills: editedProfile.skills,
+        preferences: editedProfile.preferences,
+        updated_at: new Date().toISOString()
+      }
+
       const { error } = await supabase
         .from('users')
-        .update({
-          ...editedProfile,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', user?.id)
 
       if (error) throw error
@@ -103,10 +126,20 @@ export function ProfilePanel() {
   }
 
   const handleInputChange = (field: string, value: any) => {
-    setEditedProfile(prev => ({
-      ...prev,
-      [field]: value
-    }))
+    if (field === 'preferences') {
+      setEditedProfile(prev => ({
+        ...prev,
+        preferences: {
+          ...prev.preferences,
+          ...value
+        }
+      }))
+    } else {
+      setEditedProfile(prev => ({
+        ...prev,
+        [field]: value
+      }))
+    }
   }
 
   if (isLoading) {
@@ -313,7 +346,6 @@ export function ProfilePanel() {
                 <select
                   value={editedProfile.preferences?.theme || 'system'}
                   onChange={(e) => handleInputChange('preferences', {
-                    ...editedProfile.preferences,
                     theme: e.target.value as 'light' | 'dark' | 'system'
                   })}
                   disabled={!isEditing}
@@ -329,7 +361,6 @@ export function ProfilePanel() {
                 <select
                   value={editedProfile.preferences?.language || 'en'}
                   onChange={(e) => handleInputChange('preferences', {
-                    ...editedProfile.preferences,
                     language: e.target.value
                   })}
                   disabled={!isEditing}
@@ -391,7 +422,6 @@ export function ProfilePanel() {
                   type="checkbox"
                   checked={editedProfile.preferences?.notifications || false}
                   onChange={(e) => handleInputChange('preferences', {
-                    ...editedProfile.preferences,
                     notifications: e.target.checked
                   })}
                   disabled={!isEditing}

@@ -345,66 +345,77 @@ export function TeamManagement() {
         </select>
       </div>
 
-      {/* Team Members List */}
-      <div className="space-y-4">
+      {/* Team Members Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredTeam.map((member) => (
           <motion.div
             key={member.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-card-light dark:glass-card p-4 rounded-lg"
+            className="glass-card-light dark:glass-card p-6 rounded-lg border hover:shadow-lg transition-all duration-200"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-r from-neon-blue to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                  {member.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg">{member.name}</h3>
-                  <p className="text-muted-foreground">{member.email}</p>
-                  <div className="flex items-center space-x-2 mt-1">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      member.role === 'admin' 
-                        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' 
-                        : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    }`}>
-                      {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                    </span>
-                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                      {member.department}
-                    </span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      member.status === 'active' 
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' 
-                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                    }`}>
-                      {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
-                    </span>
-                  </div>
-                </div>
+            {/* Member Avatar and Basic Info */}
+            <div className="text-center mb-4">
+              <div className="w-20 h-20 bg-gradient-to-r from-neon-blue to-purple-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3">
+                {member.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+              </div>
+              <h3 className="font-semibold text-xl mb-1">{member.name}</h3>
+              <p className="text-muted-foreground text-sm mb-2">{member.email}</p>
+            </div>
+
+            {/* Member Details */}
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Role:</span>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  member.role === 'admin' 
+                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' 
+                    : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                }`}>
+                  {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                </span>
               </div>
               
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Department:</span>
+                <span className="text-sm font-medium">{member.department}</span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Status:</span>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  member.status === 'active' 
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' 
+                    : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                }`}>
+                  {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => openEditModal(member)}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+              {member.role !== 'admin' && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => openEditModal(member)}
+                  className="flex-1"
+                  onClick={() => handleDeleteMember(member.id, member.name)}
+                  className="text-red-600 hover:text-red-700"
                 >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Edit
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remove
                 </Button>
-                {member.role !== 'admin' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDeleteMember(member.id, member.name)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Remove
-                  </Button>
-                )}
-              </div>
+              )}
             </div>
           </motion.div>
         ))}
