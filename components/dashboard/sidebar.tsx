@@ -1,9 +1,10 @@
 "use client"
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useTheme } from 'next-themes'
 
 interface SidebarProps {
   activeTab: string
@@ -53,6 +54,12 @@ const navigationItems = [
     description: 'Generate detailed reports'
   },
   {
+    id: 'profile',
+    label: 'Profile',
+    icon: User,
+    description: 'Manage your profile'
+  },
+  {
     id: 'templates',
     label: 'Templates',
     icon: Copy,
@@ -74,6 +81,7 @@ const navigationItems = [
 ]
 
 export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isCollapsed, onToggleCollapse }: SidebarProps) {
+  const { theme } = useTheme()
   const filteredItems = navigationItems.filter(item => 
     !item.adminOnly || userRole === 'admin'
   )
@@ -109,7 +117,10 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
           <div className="flex h-16 items-center justify-between border-b px-3">
             <div className="flex items-center space-x-2">
               <div className="flex items-center space-x-2">
-                <div className="text-lg font-bold text-black">cm</div>
+                <div className={cn(
+                  "text-lg font-bold transition-colors duration-200",
+                  theme === 'dark' ? "text-white" : "text-black"
+                )}>cm</div>
                 <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
               </div>
               {!isCollapsed && (

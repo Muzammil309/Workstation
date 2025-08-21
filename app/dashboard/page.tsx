@@ -14,6 +14,7 @@ import { TeamManagement } from '@/components/dashboard/team-management'
 import { ReportsPanel } from '@/components/dashboard/reports-panel'
 import { TemplatesPanel } from '@/components/dashboard/templates-panel'
 import { IntegrationsPanel } from '@/components/dashboard/integrations-panel'
+import { ProfilePanel } from '@/components/dashboard/profile-panel'
 import { useAuth } from '@/hooks/use-auth'
 
 export default function DashboardPage() {
@@ -91,6 +92,8 @@ export default function DashboardPage() {
         return <AnalyticsDashboard />
       case 'reports':
         return <ReportsPanel />
+      case 'profile':
+        return <ProfilePanel />
       case 'templates':
         return <TemplatesPanel />
       case 'integrations':
@@ -98,7 +101,11 @@ export default function DashboardPage() {
       case 'admin':
         return user.role === 'admin' ? <AdminPanel /> : <div>Access Denied</div>
       default:
-        return <TaskBoard />
+        return (
+          <div>
+            <TaskBoard />
+          </div>
+        )
     }
   }
 

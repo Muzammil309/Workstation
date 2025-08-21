@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, FolderOpen, Users, Calendar, Target, TrendingUp, MoreVertical, Edit, Trash2, Eye, X, Save } from 'lucide-react'
+import { Plus, FolderOpen, Users, Calendar, Target, TrendingUp, MoreVertical, Edit, Trash2, Eye, X, Save, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'
+import { supabase } from '@/lib/supabase'
 
 interface Project {
   id: string
@@ -20,52 +22,9 @@ interface Project {
   priority: 'low' | 'medium' | 'high'
   tasksCount: number
   completedTasks: number
+  created_by: string
+  created_at: string
 }
-
-const sampleProjects: Project[] = [
-  {
-    id: '1',
-    name: 'Website Redesign',
-    description: 'Complete overhaul of company website with modern design',
-    status: 'active',
-    progress: 65,
-    startDate: '2024-01-01',
-    endDate: '2024-03-31',
-    teamMembers: ['John Doe', 'Jane Smith', 'Mike Johnson'],
-    budget: '$15,000',
-    priority: 'high',
-    tasksCount: 24,
-    completedTasks: 16
-  },
-  {
-    id: '2',
-    name: 'Mobile App Development',
-    description: 'iOS and Android app for customer engagement',
-    status: 'planning',
-    progress: 15,
-    startDate: '2024-02-01',
-    endDate: '2024-06-30',
-    teamMembers: ['Sarah Wilson', 'Alex Brown'],
-    budget: '$25,000',
-    priority: 'medium',
-    tasksCount: 18,
-    completedTasks: 3
-  },
-  {
-    id: '3',
-    name: 'Database Migration',
-    description: 'Migrate from legacy system to cloud database',
-    status: 'completed',
-    progress: 100,
-    startDate: '2023-11-01',
-    endDate: '2024-01-15',
-    teamMembers: ['Mike Johnson', 'Lisa Chen'],
-    budget: '$8,000',
-    priority: 'high',
-    tasksCount: 12,
-    completedTasks: 12
-  }
-]
 
 const statusColors = {
   planning: 'bg-blue-500',
@@ -81,10 +40,12 @@ const priorityColors = {
 }
 
 export function ProjectsPanel() {
-  const [projects, setProjects] = useState<Project[]>(sampleProjects)
+  const { user } = useAuth()
+  const [projects, setProjects] = useState<Project[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
@@ -95,7 +56,122 @@ export function ProjectsPanel() {
     budget: '',
     priority: 'medium' as 'low' | 'medium' | 'high'
   })
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const { toast } = useToast()
+
+  // Load projects from Supabase
+  useEffect(() => {
+    loadProjects()
+  }, [])
+
+  const loadProjects = async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setProjects(data || [])
+    } catch (error: any) {
+      console.error('Error loading projects:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load projects",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleAddProject = async () => {
+    if (!newProject.name || !newProject.description || !newProject.startDate || !newProject.endDate || !newProject.budget) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const projectData = {
+        name: newProject.name,
+        description: newProject.description,
+        status: newProject.status,
+        startDate: newProject.startDate,
+        endDate: newProject.endDate,
+        teamMembers: newProject.teamMembers.split(',').map(member => member.trim()).filter(Boolean),
+        budget: newProject.budget,
+        priority: newProject.priority,
+        progress: 0,
+        tasksCount: 0,
+        completedTasks: 0,
+        created_by: user?.id,
+        created_at: new Date().toISOString()
+      }
+
+      const { error } = await supabase
+        .from('projects')
+        .insert([projectData])
+
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: "Project created successfully",
+      })
+
+      resetForm()
+      setIsCreateModalOpen(false)
+      await loadProjects()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to create project: " + error.message,
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDeleteProject = async (projectId: string, projectName: string) => {
+    if (!user || user.role !== 'admin') {
+      toast({
+        title: "Access Denied",
+        description: "Only admins can delete projects",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!confirm(`Are you sure you want to delete "${projectName}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId)
+
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: `Project "${projectName}" has been deleted`,
+      })
+
+      await loadProjects()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to delete project: " + error.message,
+        variant: "destructive"
+      })
+    }
+  }
 
   const filteredProjects = projects.filter(project => {
     const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -109,53 +185,9 @@ export function ProjectsPanel() {
   }
 
   const totalBudget = projects.reduce((sum, p) => {
-    const budget = parseInt(p.budget.replace(/[$,]/g, ''))
+    const budget = parseFloat(p.budget.replace(/[^0-9.-]+/g, '')) || 0
     return sum + budget
   }, 0)
-
-  const handleAddProject = () => {
-    if (!newProject.name || !newProject.description || !newProject.startDate || !newProject.endDate || !newProject.budget) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields",
-        variant: "destructive"
-      })
-      return
-    }
-
-    const project: Project = {
-      id: Date.now().toString(),
-      name: newProject.name,
-      description: newProject.description,
-      status: newProject.status,
-      progress: 0,
-      startDate: newProject.startDate,
-      endDate: newProject.endDate,
-      teamMembers: newProject.teamMembers ? newProject.teamMembers.split(',').map(m => m.trim()) : [],
-      budget: newProject.budget,
-      priority: newProject.priority,
-      tasksCount: 0,
-      completedTasks: 0
-    }
-
-    setProjects([...projects, project])
-    setNewProject({
-      name: '',
-      description: '',
-      status: 'planning',
-      startDate: '',
-      endDate: '',
-      teamMembers: '',
-      budget: '',
-      priority: 'medium'
-    })
-    setIsCreateModalOpen(false)
-    
-    toast({
-      title: "Success",
-      description: `Project "${project.name}" has been created successfully`,
-    })
-  }
 
   const resetForm = () => {
     setNewProject({
@@ -170,21 +202,30 @@ export function ProjectsPanel() {
     })
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+        <p className="text-muted-foreground">Loading projects...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="text-muted-foreground">Manage and organize your projects</p>
+          <p className="text-muted-foreground">Manage and track your projects</p>
         </div>
         <Button onClick={() => setIsCreateModalOpen(true)} variant="neon">
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="w-4 h-4 mr-2" />
           New Project
         </Button>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -279,9 +320,56 @@ export function ProjectsPanel() {
                 <h3 className="text-lg font-semibold mb-2">{project.name}</h3>
                 <p className="text-sm text-muted-foreground mb-3">{project.description}</p>
               </div>
-              <Button variant="ghost" size="icon">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
+              <div className="relative">
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setOpenDropdown(openDropdown === project.id ? null : project.id)}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+                
+                {/* Dropdown Menu */}
+                <AnimatePresence>
+                  {openDropdown === project.id && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute right-0 top-full mt-1 w-48 bg-card border rounded-lg shadow-lg z-10"
+                    >
+                      <div className="py-1">
+                        <button
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center space-x-2"
+                          onClick={() => setOpenDropdown(null)}
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span>View Details</span>
+                        </button>
+                        <button
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center space-x-2"
+                          onClick={() => setOpenDropdown(null)}
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span>Edit Project</span>
+                        </button>
+                        {user?.role === 'admin' && (
+                          <button
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-red-500 hover:text-white flex items-center space-x-2"
+                            onClick={() => {
+                              setOpenDropdown(null)
+                              handleDeleteProject(project.id, project.name)
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete Project</span>
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
             {/* Status and Priority */}
@@ -300,45 +388,34 @@ export function ProjectsPanel() {
                 <span>Progress</span>
                 <span>{project.progress}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+              <div className="w-full bg-muted rounded-full h-2">
+                <div 
+                  className="bg-primary h-2 rounded-full transition-all duration-300" 
                   style={{ width: `${project.progress}%` }}
                 />
               </div>
             </div>
 
             {/* Project Details */}
-            <div className="space-y-3 mb-4">
-              <div className="flex items-center space-x-2 text-sm">
-                <Calendar className="w-4 h-4 text-muted-foreground" />
-                <span>{project.startDate} - {project.endDate}</span>
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <Calendar className="w-4 h-4" />
+                <span>{new Date(project.startDate).toLocaleDateString()} - {new Date(project.endDate).toLocaleDateString()}</span>
               </div>
-              <div className="flex items-center space-x-2 text-sm">
-                <Users className="w-4 h-4 text-muted-foreground" />
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <Target className="w-4 h-4" />
+                <span>{project.budget}</span>
+              </div>
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
                 <span>{project.teamMembers.length} team members</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm">
-                <Target className="w-4 h-4 text-muted-foreground" />
-                <span>{project.completedTasks}/{project.tasksCount} tasks completed</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm">
-                <span className="font-medium">Budget: {project.budget}</span>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" className="flex-1">
-                <Eye className="h-4 w-4 mr-2" />
-                View
-              </Button>
-              <Button variant="outline" size="sm">
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="sm">
-                <Trash2 className="h-4 w-4" />
-              </Button>
+            {/* Tasks Summary */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Tasks: {project.completedTasks}/{project.tasksCount}</span>
+              <span className="text-muted-foreground">Created {new Date(project.created_at).toLocaleDateString()}</span>
             </div>
           </motion.div>
         ))}
@@ -352,26 +429,17 @@ export function ProjectsPanel() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-            onClick={() => setIsCreateModalOpen(false)}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-card border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
+              className="bg-background border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold">Create New Project</h2>
-                  <p className="text-muted-foreground">Fill in the details to create a new project</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsCreateModalOpen(false)}
-                >
-                  <X className="h-4 w-4" />
+                <h2 className="text-2xl font-bold">Create New Project</h2>
+                <Button variant="ghost" size="icon" onClick={() => setIsCreateModalOpen(false)}>
+                  <X className="h-5 w-5" />
                 </Button>
               </div>
 
