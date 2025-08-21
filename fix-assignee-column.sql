@@ -11,18 +11,17 @@ SET assignee = ''
 WHERE assignee IS NULL;
 
 -- 3. Add team members to users table
-INSERT INTO users (id, email, name, role, status, department, created_at, updated_at) VALUES
+INSERT INTO users (id, email, name, role, status, department, created_at) VALUES
 -- Generate UUIDs for each team member
-(gen_random_uuid(), 'alina.atta@changemechanics.pk', 'Alina Atta', 'user', 'active', 'Development', NOW(), NOW()),
-(gen_random_uuid(), 'rameesha.nouman@changemechanics.pk', 'Rameesha Nouman', 'user', 'active', 'Design', NOW(), NOW()),
-(gen_random_uuid(), 'mehar.alam@changemechanics.pk', 'Mehar Alam', 'user', 'active', 'Marketing', NOW(), NOW()),
-(gen_random_uuid(), 'umayr.masud@changemechanics.pk', 'Umayr Masud', 'user', 'active', 'Development', NOW(), NOW()),
-(gen_random_uuid(), 'muzammil.ahmed@changemechanics.pk', 'Muzammil Ahmed', 'admin', 'active', 'Management', NOW(), NOW())
+(gen_random_uuid(), 'alina.atta@changemechanics.pk', 'Alina Atta', 'user', 'active', 'Development', NOW()),
+(gen_random_uuid(), 'rameesha.nouman@changemechanics.pk', 'Rameesha Nouman', 'user', 'active', 'Design', NOW()),
+(gen_random_uuid(), 'mehar.alam@changemechanics.pk', 'Mehar Alam', 'user', 'active', 'Marketing', NOW()),
+(gen_random_uuid(), 'umayr.masud@changemechanics.pk', 'Umayr Masud', 'user', 'active', 'Development', NOW()),
+(gen_random_uuid(), 'muzammil.ahmed@changemechanics.pk', 'Muzammil Ahmed', 'admin', 'active', 'Management', NOW())
 ON CONFLICT (email) DO UPDATE SET
   name = EXCLUDED.name,
   role = EXCLUDED.role,
-  department = EXCLUDED.department,
-  updated_at = NOW();
+  department = EXCLUDED.department;
 
 -- 4. Verify the changes
 SELECT 
