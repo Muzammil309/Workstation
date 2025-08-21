@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('tasks')
   const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Set to true by default for desktop
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false) // New state for collapsed sidebar
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, debugAuth } = useAuth()
 
   console.log('🔍 DashboardPage: Render with user:', user, 'isLoading:', isLoading)
 
@@ -34,6 +34,25 @@ export default function DashboardPage() {
           <div className="text-gray-400 text-sm">
             Debug: isLoading = {isLoading ? 'true' : 'false'}, user = {user ? 'exists' : 'null'}
           </div>
+          <div className="text-gray-400 text-xs">
+            If this takes more than 5 seconds, there may be an authentication issue
+          </div>
+          <button 
+            onClick={() => window.location.href = '/'}
+            className="px-4 py-2 bg-neon-blue text-white rounded-lg hover:bg-neon-blue/90 transition-colors"
+          >
+            Go to Login
+          </button>
+          <button 
+            onClick={async () => {
+              const debugInfo = await debugAuth()
+              console.log('🔍 Dashboard Debug Info:', debugInfo)
+              alert('Check console for debug info')
+            }}
+            className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+          >
+            Debug Auth
+          </button>
         </div>
       </div>
     )

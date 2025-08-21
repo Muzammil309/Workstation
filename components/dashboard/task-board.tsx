@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { TasksService, Task, CreateTaskData } from '@/lib/tasks-service'
 import { useToast } from '@/hooks/use-toast'
@@ -14,6 +14,7 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  useDroppable,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -29,7 +30,13 @@ export function TaskBoard() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [activeTimers, setActiveTimers] = useState<Record<string, { startTime: number; elapsed: number }>>({})
+  const [activeTimers, setActiveTimers] = useState<Record<string, { 
+    startTime: number; 
+    elapsed: number; 
+    isPaused: boolean; 
+    pausedAt: number; 
+    totalPausedTime: number;
+  }>>({})
   
   const { user } = useAuth()
   const { toast } = useToast()
@@ -53,8 +60,8 @@ export function TaskBoard() {
       setActiveTimers(prev => {
         const updated = { ...prev }
         Object.keys(updated).forEach(taskId => {
-          if (updated[taskId]) {
-            updated[taskId].elapsed = Date.now() - updated[taskId].startTime
+          if (updated[taskId] && !updated[taskId].isPaused) {
+            updated[taskId].elapsed = Date.now() - updated[taskId].startTime - updated[taskId].totalPausedTime
           }
         })
         return updated
@@ -67,34 +74,19 @@ export function TaskBoard() {
   const loadTasks = async () => {
     try {
       setIsLoading(true)
-      console.log('🔄 Loading tasks from database...')
-      console.log('🔍 Current user:', user)
       
       // Use direct Supabase call instead of TasksService
-      console.log('🔄 Using direct Supabase query...')
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
         .order('created_at', { ascending: false })
       
-      console.log('🔍 Direct Supabase query result:', { data, error })
-      
       if (error) {
-        console.error('❌ Supabase query error:', error)
         throw error
       }
       
-      console.log('✅ Tasks loaded directly from Supabase:', data)
-      console.log('📊 Tasks count:', data?.length || 0)
-      
       setTasks(data || [])
     } catch (error: any) {
-      console.error('❌ Failed to load tasks:', error)
-      console.error('❌ Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      })
       toast({
         title: 'Error',
         description: 'Failed to load tasks. Please try again.',
@@ -116,31 +108,55 @@ export function TaskBoard() {
     }
 
     try {
-      console.log('🔄 Creating task from modal:', taskData, 'for user:', user.id)
-      
-      // Use direct Supabase call with modal data
-      console.log('🔄 Using direct Supabase insertion...')
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert({
-          title: taskData.title,
-          description: taskData.description || '',
-          status: taskData.status || 'pending',
-          priority: taskData.priority || 'medium',
-          progress: 0,
-          created_by: user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single()
+      // Input validation
+      if (!taskData.title || typeof taskData.title !== 'string' || taskData.title.trim().length === 0) {
+        throw new Error('Task title is required')
+      }
+
+      if (taskData.title.length > 255) {
+        throw new Error('Task title must be less than 255 characters')
+      }
+
+      if (taskData.description && taskData.description.length > 1000) {
+        throw new Error('Task description must be less than 1000 characters')
+      }
+
+      // Validate status
+      const validStatuses = ['pending', 'in-progress', 'completed']
+      if (taskData.status && !validStatuses.includes(taskData.status)) {
+        throw new Error('Invalid task status')
+      }
+
+      // Validate priority
+      const validPriorities = ['low', 'medium', 'high']
+      if (taskData.priority && !validPriorities.includes(taskData.priority)) {
+        throw new Error('Invalid task priority')
+      }
+
+             // Use direct Supabase call with modal data
+       const { data, error } = await supabase
+         .from('tasks')
+         .insert({
+           title: taskData.title.trim(),
+           description: taskData.description?.trim() || '',
+           status: taskData.status || 'pending',
+           priority: taskData.priority || 'medium',
+           progress: taskData.progress || 0,
+           estimated_hours: taskData.estimatedHours || 0,
+           deadline: taskData.deadline || null,
+           assignee: taskData.assignee || '',
+           tags: taskData.tags || [],
+           dependencies: taskData.dependencies || [],
+           created_by: user.id,
+           created_at: new Date().toISOString(),
+           updated_at: new Date().toISOString()
+         })
+         .select()
+         .single()
         
       if (error) {
-        console.error('❌ Direct Supabase insertion failed:', error)
         throw error
       }
-      
-      console.log('✅ Direct Supabase insertion successful:', data)
       
       // Reload tasks from database
       await loadTasks()
@@ -153,10 +169,9 @@ export function TaskBoard() {
         description: 'Task created successfully!',
       })
     } catch (error: any) {
-      console.error('❌ Failed to create task:', error)
       toast({
         title: 'Error',
-        description: `Failed to create task: ${error.message}`,
+        description: error.message || 'Failed to create task. Please try again.',
         variant: 'destructive',
       })
     }
@@ -164,8 +179,28 @@ export function TaskBoard() {
 
   const handleUpdateTask = async (taskId: string, updates: Partial<CreateTaskData>) => {
     try {
-      console.log('🔄 Updating task:', taskId, 'with:', updates)
-      
+      // Input validation
+      if (!taskId || typeof taskId !== 'string') {
+        throw new Error('Invalid task ID')
+      }
+
+      // Validate progress value
+      if (updates.progress !== undefined && (updates.progress < 0 || updates.progress > 100)) {
+        throw new Error('Progress must be between 0 and 100')
+      }
+
+      // Validate status
+      if (updates.status && !['pending', 'in-progress', 'completed'].includes(updates.status)) {
+        throw new Error('Invalid task status')
+      }
+
+      // Validate priority
+      if (updates.priority && !['low', 'medium', 'high'].includes(updates.priority)) {
+        throw new Error('Invalid task priority')
+      }
+
+      console.log(`🔄 Updating task ${taskId} with:`, updates)
+
       // Use direct Supabase call instead of TasksService
       const { data, error } = await supabase
         .from('tasks')
@@ -178,11 +213,11 @@ export function TaskBoard() {
         .single()
       
       if (error) {
-        console.error('❌ Failed to update task:', error)
+        console.error('❌ Supabase update error:', error)
         throw error
       }
       
-      console.log('✅ Task updated successfully:', data)
+      console.log(`✅ Task updated successfully:`, data)
       
       // Update local state immediately for better UX
       setTasks(prev => prev.map(task => 
@@ -195,11 +230,11 @@ export function TaskBoard() {
         title: 'Success',
         description: 'Task updated successfully!',
       })
-    } catch (error) {
-      console.error('❌ Failed to update task:', error)
+    } catch (error: any) {
+      console.error('❌ Error in handleUpdateTask:', error)
       toast({
         title: 'Error',
-        description: 'Failed to update task. Please try again.',
+        description: error.message || 'Failed to update task. Please try again.',
         variant: 'destructive',
       })
     }
@@ -207,8 +242,17 @@ export function TaskBoard() {
 
   const handleDeleteTask = async (taskId: string) => {
     try {
-      console.log('🔄 Deleting task:', taskId)
-      
+      // Input validation
+      if (!taskId || typeof taskId !== 'string') {
+        throw new Error('Invalid task ID')
+      }
+
+      // Check if task exists
+      const taskExists = tasks.find(task => task.id === taskId)
+      if (!taskExists) {
+        throw new Error('Task not found')
+      }
+
       // Use direct Supabase call instead of TasksService
       const { error } = await supabase
         .from('tasks')
@@ -216,11 +260,8 @@ export function TaskBoard() {
         .eq('id', taskId)
       
       if (error) {
-        console.error('❌ Failed to delete task:', error)
         throw error
       }
-      
-      console.log('✅ Task deleted successfully')
       
       // Update local state immediately for better UX
       setTasks(prev => prev.filter(task => task.id !== taskId))
@@ -236,11 +277,10 @@ export function TaskBoard() {
         title: 'Success',
         description: 'Task deleted successfully!',
       })
-    } catch (error) {
-      console.error('❌ Failed to delete task:', error)
+    } catch (error: any) {
       toast({
         title: 'Error',
-        description: 'Failed to delete task. Please try again.',
+        description: error.message || 'Failed to delete task. Please try again.',
         variant: 'destructive',
       })
     }
@@ -248,11 +288,49 @@ export function TaskBoard() {
 
   // Timer management functions
   const startTimer = (taskId: string) => {
-    console.log('⏱️ Starting timer for task:', taskId)
     setActiveTimers(prev => ({
       ...prev,
-      [taskId]: { startTime: Date.now(), elapsed: 0 }
+      [taskId]: { 
+        startTime: Date.now(), 
+        elapsed: 0, 
+        isPaused: false, 
+        pausedAt: 0, 
+        totalPausedTime: 0 
+      }
     }))
+  }
+
+  const pauseTimer = (taskId: string) => {
+    setActiveTimers(prev => {
+      if (prev[taskId] && !prev[taskId].isPaused) {
+        return {
+          ...prev,
+          [taskId]: {
+            ...prev[taskId],
+            isPaused: true,
+            pausedAt: Date.now()
+          }
+        }
+      }
+      return prev
+    })
+  }
+
+  const resumeTimer = (taskId: string) => {
+    setActiveTimers(prev => {
+      if (prev[taskId] && prev[taskId].isPaused) {
+        const pauseDuration = Date.now() - prev[taskId].pausedAt
+        return {
+          ...prev,
+          [taskId]: {
+            ...prev[taskId],
+            isPaused: false,
+            totalPausedTime: prev[taskId].totalPausedTime + pauseDuration
+          }
+        }
+      }
+      return prev
+    })
   }
 
   const stopTimer = (taskId: string) => {
@@ -289,14 +367,14 @@ export function TaskBoard() {
     // Get the target column from the drop zone
     let newStatus = activeTask.status
     
-    // Check if dropping on a column drop zone by looking at the parent container
+    // Check if dropping on a column drop zone
     const targetElement = over.id as string
     
-    if (targetElement === 'pending' || targetElement === 'pending-column') {
+    if (targetElement === 'pending') {
       newStatus = 'pending'
-    } else if (targetElement === 'in-progress' || targetElement === 'in-progress-column') {
+    } else if (targetElement === 'in-progress') {
       newStatus = 'in-progress'
-    } else if (targetElement === 'completed' || targetElement === 'completed-column') {
+    } else if (targetElement === 'completed') {
       newStatus = 'completed'
     } else {
       // If dropping on another task, get its status
@@ -391,7 +469,7 @@ export function TaskBoard() {
         </div>
         
         {/* Task Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <div className="glass-card-light dark:glass-card p-4 rounded-lg">
             <div className="flex items-center justify-between">
               <div>
@@ -464,134 +542,178 @@ export function TaskBoard() {
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Pending Column */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground flex items-center">
-                <div className="w-3 h-3 bg-gray-500 rounded-full mr-2"></div>
-                Pending
-              </h3>
-              <span className="bg-gray-500/20 text-gray-600 dark:text-gray-400 px-2 py-1 rounded text-xs">
-                {tasks.filter(task => task.status === 'pending').length}
-              </span>
-            </div>
-                         <div 
-               id="pending-column"
-               className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
-               data-column="pending"
-             >
-              {tasks.filter(task => task.status === 'pending').length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No pending tasks
-                </div>
-              ) : (
-                <SortableContext
-                  items={tasks.filter(task => task.status === 'pending').map(t => t.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                                     {tasks.filter(task => task.status === 'pending').map((task) => (
-                     <SortableTaskCard 
-                       key={task.id} 
-                       task={task} 
-                       onUpdate={handleUpdateTask} 
-                       onDelete={handleDeleteTask}
-                       onStartTimer={startTimer}
-                       onStopTimer={stopTimer}
-                       activeTimers={activeTimers}
-                       formatTime={formatTime}
-                     />
-                   ))}
-                </SortableContext>
-              )}
-            </div>
-          </div>
+          <DroppableColumn 
+            status="pending" 
+            title="Pending" 
+            color="gray"
+            taskCount={tasks.filter(task => task.status === 'pending').length}
+          >
+            {tasks.filter(task => task.status === 'pending').length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No pending tasks
+              </div>
+            ) : (
+              <SortableContext
+                items={tasks.filter(task => task.status === 'pending').map(t => t.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                                 {tasks.filter(task => task.status === 'pending').map((task) => (
+                   <SortableTaskCard 
+                     key={task.id} 
+                     task={task} 
+                     onUpdate={handleUpdateTask} 
+                     onDelete={handleDeleteTask}
+                     onStartTimer={startTimer}
+                     onPauseTimer={pauseTimer}
+                     onResumeTimer={resumeTimer}
+                     onStopTimer={stopTimer}
+                     activeTimers={activeTimers}
+                     formatTime={formatTime}
+                     toast={toast}
+                     allTasks={tasks}
+                   />
+                 ))}
+              </SortableContext>
+            )}
+          </DroppableColumn>
 
           {/* In Progress Column */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground flex items-center">
-                <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                In Progress
-              </h3>
-              <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs">
-                {tasks.filter(task => task.status === 'in-progress').length}
-              </span>
-            </div>
-                         <div 
-               id="in-progress-column"
-               className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
-               data-column="in-progress"
-             >
-              {tasks.filter(task => task.status === 'in-progress').length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No tasks in progress
-                </div>
-              ) : (
-                <SortableContext
-                  items={tasks.filter(task => task.status === 'in-progress').map(t => t.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                                     {tasks.filter(task => task.status === 'in-progress').map((task) => (
-                     <SortableTaskCard 
-                       key={task.id} 
-                       task={task} 
-                       onUpdate={handleUpdateTask} 
-                       onDelete={handleDeleteTask}
-                       onStartTimer={startTimer}
-                       onStopTimer={stopTimer}
-                       activeTimers={activeTimers}
-                       formatTime={formatTime}
-                     />
-                   ))}
-                </SortableContext>
-              )}
-            </div>
-          </div>
+          <DroppableColumn 
+            status="in-progress" 
+            title="In Progress" 
+            color="blue"
+            taskCount={tasks.filter(task => task.status === 'in-progress').length}
+          >
+            {tasks.filter(task => task.status === 'in-progress').length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No tasks in progress
+              </div>
+            ) : (
+              <SortableContext
+                items={tasks.filter(task => task.status === 'in-progress').map(t => t.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                                 {tasks.filter(task => task.status === 'in-progress').map((task) => (
+                   <SortableTaskCard 
+                     key={task.id} 
+                     task={task} 
+                     onUpdate={handleUpdateTask} 
+                     onDelete={handleDeleteTask}
+                     onStartTimer={startTimer}
+                     onPauseTimer={pauseTimer}
+                     onResumeTimer={resumeTimer}
+                     onStopTimer={stopTimer}
+                     activeTimers={activeTimers}
+                     formatTime={formatTime}
+                     toast={toast}
+                     allTasks={tasks}
+                   />
+                 ))}
+              </SortableContext>
+            )}
+          </DroppableColumn>
 
           {/* Completed Column */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground flex items-center">
-                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                Completed
-              </h3>
-              <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded text-xs">
-                {tasks.filter(task => task.status === 'completed').length}
-              </span>
-            </div>
-                         <div 
-               id="completed-column"
-               className="min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 drop-zone"
-               data-column="completed"
-             >
-              {tasks.filter(task => task.status === 'completed').length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No completed tasks
-                </div>
-              ) : (
-                <SortableContext
-                  items={tasks.filter(task => task.status === 'completed').map(t => t.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                                     {tasks.filter(task => task.status === 'completed').map((task) => (
-                     <SortableTaskCard 
-                       key={task.id} 
-                       task={task} 
-                       onUpdate={handleUpdateTask} 
-                       onDelete={handleDeleteTask}
-                       onStartTimer={startTimer}
-                       onStopTimer={stopTimer}
-                       activeTimers={activeTimers}
-                       formatTime={formatTime}
-                     />
-                   ))}
-                </SortableContext>
-              )}
-            </div>
-          </div>
+          <DroppableColumn 
+            status="completed" 
+            title="Completed" 
+            color="green"
+            taskCount={tasks.filter(task => task.status === 'completed').length}
+          >
+            {tasks.filter(task => task.status === 'completed').length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                No completed tasks
+              </div>
+            ) : (
+              <SortableContext
+                items={tasks.filter(task => task.status === 'completed').map(t => t.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                                 {tasks.filter(task => task.status === 'completed').map((task) => (
+                   <SortableTaskCard 
+                     key={task.id} 
+                     task={task} 
+                     onUpdate={handleUpdateTask} 
+                     onDelete={handleDeleteTask}
+                     onStartTimer={startTimer}
+                     onPauseTimer={pauseTimer}
+                     onResumeTimer={resumeTimer}
+                     onStopTimer={stopTimer}
+                     activeTimers={activeTimers}
+                     formatTime={formatTime}
+                     toast={toast}
+                     allTasks={tasks}
+                   />
+                 ))}
+              </SortableContext>
+            )}
+          </DroppableColumn>
         </div>
       </DndContext>
+    </div>
+  )
+}
+
+// Droppable Column Component
+interface DroppableColumnProps {
+  status: string
+  title: string
+  color: 'gray' | 'blue' | 'green'
+  taskCount: number
+  children: React.ReactNode
+}
+
+function DroppableColumn({ status, title, color, taskCount, children }: DroppableColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: status,
+  })
+
+  const colorClasses = {
+    gray: {
+      dot: 'bg-gray-500',
+      badge: 'bg-gray-500/20 text-gray-600 dark:text-gray-400',
+      glow: 'ring-gray-400 bg-gray-50/50 dark:bg-gray-800/50'
+    },
+    blue: {
+      dot: 'bg-blue-500',
+      badge: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+      glow: 'ring-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
+    },
+    green: {
+      dot: 'bg-green-500',
+      badge: 'bg-green-500/20 text-green-600 dark:text-green-400',
+      glow: 'ring-green-400 bg-green-50/50 dark:bg-green-900/20'
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-foreground flex items-center">
+          <div className={`w-3 h-3 ${colorClasses[color].dot} rounded-full mr-2 transition-all duration-300 ${
+            isOver ? 'animate-pulse scale-125' : ''
+          }`}></div>
+          {title}
+        </h3>
+        <span className={`${colorClasses[color].badge} px-2 py-1 rounded text-xs transition-all duration-300 ${
+          isOver ? 'scale-110 font-bold' : ''
+        }`}>
+          {taskCount}
+        </span>
+      </div>
+      <div 
+        ref={setNodeRef}
+        className={`min-h-[400px] column-light dark:column-dark rounded-lg p-4 space-y-3 transition-all duration-300 ease-in-out transform ${
+          isOver 
+            ? `ring-2 ${colorClasses[color].glow} scale-[1.02] shadow-lg border-2 border-dashed border-current bg-opacity-80` 
+            : 'hover:shadow-md'
+        }`}
+        data-column={status}
+      >
+        {children}
+      </div>
     </div>
   )
 }
@@ -602,9 +724,19 @@ interface SortableTaskCardProps {
   onUpdate: (taskId: string, updates: Partial<CreateTaskData>) => void
   onDelete: (taskId: string) => void
   onStartTimer: (taskId: string) => void
+  onPauseTimer: (taskId: string) => void
+  onResumeTimer: (taskId: string) => void
   onStopTimer: (taskId: string) => void
-  activeTimers: Record<string, { startTime: number; elapsed: number }>
+  activeTimers: Record<string, { 
+    startTime: number; 
+    elapsed: number; 
+    isPaused: boolean; 
+    pausedAt: number; 
+    totalPausedTime: number;
+  }>
   formatTime: (ms: number) => string
+  toast: any
+  allTasks: Task[]
 }
 
 function SortableTaskCard({ 
@@ -612,10 +744,58 @@ function SortableTaskCard({
   onUpdate, 
   onDelete, 
   onStartTimer, 
+  onPauseTimer, 
+  onResumeTimer, 
   onStopTimer, 
   activeTimers, 
-  formatTime 
+  formatTime,
+  toast,
+  allTasks
 }: SortableTaskCardProps) {
+  const { user } = useAuth()
+  const [assignedUser, setAssignedUser] = useState<any>(null)
+  const [users, setUsers] = useState<any[]>([])
+
+  // Fetch users for assignment display
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, name, email, avatar')
+        
+        if (error) throw error
+        setUsers(data || [])
+        
+        // Find assigned user
+        if (task.assignee_id) {
+          const assigned = data?.find(u => u.id === task.assignee_id)
+          setAssignedUser(assigned)
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error)
+      }
+    }
+    
+    fetchUsers()
+  }, [task.assignee_id])
+
+  // Calculate time remaining until deadline
+  const getTimeRemaining = () => {
+    if (!task.deadline) return null
+    
+    const now = new Date()
+    const deadline = new Date(task.deadline)
+    const diffTime = deadline.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    if (diffDays < 0) return { text: `${Math.abs(diffDays)} days overdue`, isOverdue: true }
+    if (diffDays === 0) return { text: 'Due today', isOverdue: false }
+    if (diffDays === 1) return { text: '1 day left', isOverdue: false }
+    return { text: `${diffDays} days left`, isOverdue: false }
+  }
+
+  const timeRemaining = getTimeRemaining()
   const {
     attributes,
     listeners,
@@ -640,117 +820,402 @@ function SortableTaskCard({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="task-card-light dark:task-card-dark p-4 rounded-lg border cursor-grab active:cursor-grabbing group transition-all hover:shadow-lg"
+      className={`relative bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 group transition-all duration-300 backdrop-blur-sm ${
+        isDragging 
+          ? 'shadow-2xl scale-105 rotate-2 border-neon-blue/70 bg-white/95 dark:bg-gray-800/95 z-50 ring-2 ring-neon-blue/50' 
+          : 'hover:shadow-xl hover:scale-[1.02] hover:border-neon-blue/50'
+      }`}
     >
-      <div className="space-y-3">
-        {/* Task Title */}
-        <h4 className="font-medium text-foreground dark:text-white text-sm leading-tight">{task.title}</h4>
+      {/* Drag Handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <div className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
+          ⋮⋮
+        </div>
+      </div>
+      <div className="space-y-3 md:space-y-4">
+        {/* Task Header */}
+        <div className="flex items-start justify-between gap-2">
+          <h4 className="font-semibold text-gray-900 dark:text-white text-sm md:text-base leading-tight flex-1 min-w-0 truncate">{task.title}</h4>
+          <div className="flex items-center space-x-1 flex-shrink-0">
+            {isTimerActive && (
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            )}
+            <div className="w-1 h-4 bg-gray-300 dark:bg-gray-600 rounded-full opacity-50 group-hover:opacity-100 transition-opacity"></div>
+          </div>
+        </div>
         
         {/* Task Description */}
         {task.description && (
-          <p className="text-muted-foreground dark:text-gray-300 text-xs leading-relaxed line-clamp-2">
+          <p className="text-gray-600 dark:text-gray-300 text-xs md:text-sm leading-relaxed line-clamp-2 bg-gray-50 dark:bg-gray-700/50 p-2 md:p-3 rounded-lg">
             {task.description}
           </p>
         )}
         
+        {/* Task Details Section */}
+        <div className="space-y-3">
+          {/* Assigned User */}
+          {task.assignee && (
+            <div className="flex items-center space-x-2 text-sm">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
+                {task.assignee.charAt(0).toUpperCase()}
+              </div>
+              <span className="text-gray-600 dark:text-gray-300 font-medium">{task.assignee}</span>
+            </div>
+          )}
+          
+          {/* Time Estimation and Actual Time */}
+          <div className="flex items-center justify-between text-sm">
+            {task.estimated_hours && (
+              <div className="flex items-center space-x-1 text-blue-600 dark:text-blue-400">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+                <span>Est: {task.estimated_hours}h</span>
+              </div>
+            )}
+            {task.actual_time && (
+              <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+                <span>Actual: {task.actual_time}</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Deadline and Time Remaining */}
+          {task.deadline && (
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center space-x-1 text-gray-600 dark:text-gray-300">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                </svg>
+                <span>Due: {new Date(task.deadline).toLocaleDateString()}</span>
+              </div>
+              {timeRemaining && (
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  timeRemaining.isOverdue 
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' 
+                    : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                }`}>
+                  {timeRemaining.text}
+                </span>
+              )}
+            </div>
+          )}
+          
+          {/* Tags */}
+          {task.tags && task.tags.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM7 7a1 1 0 000 2h6a1 1 0 100-2H7zM7 11a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                </svg>
+                <span>Tags</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {task.tags.map((tag, index) => (
+                  <span 
+                    key={index}
+                    className="px-2 py-1 bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-700 dark:text-purple-300 text-xs rounded-full border border-purple-500/30"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Dependencies */}
+          {task.dependencies && task.dependencies.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" clipRule="evenodd" />
+                </svg>
+                <span>Dependencies</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                 {task.dependencies.map((depId, index) => {
+                   const depTask = allTasks.find(t => t.id === depId)
+                   return depTask ? (
+                     <span 
+                       key={index}
+                       className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs rounded-full border border-orange-300 dark:border-orange-700"
+                     >
+                       📋 {depTask.title}
+                     </span>
+                   ) : null
+                 })}
+               </div>
+             </div>
+           )}
+        </div>
+        
         {/* Timer Display */}
         {isTimerActive && (
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded px-2 py-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-blue-600 dark:text-blue-400 font-medium">⏱️ Timer</span>
-              <span className="text-blue-600 dark:text-blue-400 font-mono">
+          <div className="bg-gradient-to-r from-blue-500/10 to-green-500/10 border border-blue-500/30 rounded-lg px-3 py-2 backdrop-blur-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span className="text-blue-600 dark:text-blue-400 font-medium text-sm">Active Timer</span>
+              </div>
+              <span className="text-blue-600 dark:text-blue-400 font-mono text-lg font-bold">
                 {formatTime(activeTimers[task.id].elapsed)}
               </span>
             </div>
           </div>
         )}
         
-        {/* Priority Badge */}
+        {/* Priority Badge and Progress */}
         <div className="flex items-center justify-between">
-          <span className={`px-2 py-1 rounded text-xs font-medium ${
-            task.priority === 'high' ? 'bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30' :
-            task.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30' :
-            'bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/30'
-          }`}>
-            {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-          </span>
-          
-          {/* Progress Bar */}
-          <div className="flex items-center space-x-2">
-            <div className="w-16 h-1.5 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-neon-blue rounded-full transition-all"
-                style={{ width: `${task.progress || 0}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground dark:text-gray-400">{task.progress || 0}%</span>
+          <div className="flex items-center space-x-3">
+            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-1 ${
+              task.priority === 'high' ? 'bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-700 dark:text-red-400 border border-red-500/40' :
+              task.priority === 'medium' ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-700 dark:text-yellow-400 border border-yellow-500/40' :
+              'bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-700 dark:text-green-400 border border-green-500/40'
+            }`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${
+                task.priority === 'high' ? 'bg-red-500' :
+                task.priority === 'medium' ? 'bg-yellow-500' :
+                'bg-green-500'
+              }`}></div>
+              <span>{task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}</span>
+            </span>
+            
+            {/* Status Badge */}
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              task.status === 'pending' ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' :
+              task.status === 'in-progress' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' :
+              'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+            }`}>
+              {task.status === 'in-progress' ? 'In Progress' : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+            </span>
           </div>
+          
+                     {/* Progress Bar */}
+           <div className="flex items-center space-x-2">
+             <div className="w-24 h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
+               <div 
+                 className={`h-full rounded-full transition-all duration-500 ease-out ${
+                   task.progress === 100 
+                     ? 'bg-gradient-to-r from-green-500 to-emerald-500 shadow-sm' 
+                     : task.progress >= 75 
+                     ? 'bg-gradient-to-r from-blue-500 to-indigo-500' 
+                     : task.progress >= 50 
+                     ? 'bg-gradient-to-r from-yellow-500 to-orange-500' 
+                     : 'bg-gradient-to-r from-red-500 to-pink-500'
+                 }`}
+                 style={{ width: `${task.progress || 0}%` }}
+               />
+               {task.progress === 100 && (
+                 <div className="absolute inset-0 bg-green-500/20 rounded-full animate-pulse"></div>
+               )}
+               {/* Progress indicator dots */}
+               {task.progress > 0 && task.progress < 100 && (
+                 <div className="absolute inset-0 flex items-center justify-center">
+                   <div className="w-1 h-1 bg-white/80 rounded-full shadow-sm"></div>
+                 </div>
+               )}
+             </div>
+             <span className={`text-xs font-medium min-w-[2.5rem] ${
+               task.progress === 100 
+                 ? 'text-green-600 dark:text-green-400 font-bold' 
+                 : task.progress >= 75 
+                 ? 'text-blue-600 dark:text-blue-400'
+                 : task.progress >= 50 
+                 ? 'text-yellow-600 dark:text-yellow-400'
+                 : 'text-red-600 dark:text-red-400'
+             }`}>
+               {task.progress || 0}%
+             </span>
+           </div>
         </div>
         
         {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="flex items-center space-x-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 opacity-0 group-hover:opacity-100 transition-all duration-300">
+          <div className="flex items-center flex-wrap gap-1 sm:gap-2">
                          {/* Start Timer Button */}
              {canStartTimer && (
                <button
-                 onClick={async () => {
-                   console.log('🚀 Starting task:', task.id)
-                   onStartTimer(task.id)
-                   await onUpdate(task.id, { status: 'in-progress' })
+                 onClick={async (e) => {
+                   e.stopPropagation()
+                   try {
+                     console.log(`🚀 Starting task: ${task.id}`)
+                     
+                     // Start the timer first
+                     onStartTimer(task.id)
+                     
+                     // Update task status to in-progress
+                     await onUpdate(task.id, { 
+                       status: 'in-progress'
+                     })
+                     
+                     console.log(`✅ Task ${task.id} started successfully`)
+                   } catch (error) {
+                     console.error('❌ Error starting task:', error)
+                     toast({
+                       title: 'Error',
+                       description: 'Failed to start task. Please try again.',
+                       variant: 'destructive',
+                     })
+                   }
                  }}
-                 className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 text-xs font-medium"
+                 className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-medium rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
                >
-                 ▶️ Start
+                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                 </svg>
+                 <span>Start Task</span>
                </button>
              )}
             
-            {/* Stop Timer Button */}
+            {/* Timer Control Buttons */}
             {isTimerActive && (
-              <button
-                onClick={() => onStopTimer(task.id)}
-                className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 text-xs font-medium"
-              >
-                ⏹️ Stop
-              </button>
+              <div className="flex items-center space-x-2">
+                {/* Pause/Resume Button */}
+                {!activeTimers[task.id]?.isPaused ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onPauseTimer(task.id)
+                    }}
+                    className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs font-medium rounded-lg hover:from-yellow-600 hover:to-orange-600 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                  >
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span>Pause</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onResumeTimer(task.id)
+                    }}
+                    className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-medium rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                  >
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                    </svg>
+                    <span>Resume</span>
+                  </button>
+                )}
+                
+                {/* Stop Timer Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onStopTimer(task.id)
+                  }}
+                  className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-medium rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+                  </svg>
+                  <span>Stop</span>
+                </button>
+              </div>
             )}
             
-            {/* Complete Button */}
-            {canComplete && (
-              <button
-                onClick={() => {
-                  onStopTimer(task.id)
-                  onUpdate(task.id, { status: 'completed' })
-                }}
-                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-xs font-medium"
-              >
-                ✅ Complete
-              </button>
-            )}
+                         {/* Complete Button */}
+             {canComplete && (
+               <button
+                 onClick={async (e) => {
+                   e.stopPropagation()
+                   try {
+                     console.log(`✅ Completing task: ${task.id}`)
+                     
+                     // Stop the timer and calculate actual time
+                     const timer = activeTimers[task.id]
+                     let actualTime = task.actual_time || '0h'
+                     
+                     if (timer) {
+                       const totalMs = timer.elapsed + (Date.now() - timer.startTime)
+                       const hours = Math.round((totalMs / (1000 * 60 * 60)) * 10) / 10
+                       actualTime = `${hours}h`
+                       onStopTimer(task.id)
+                     }
+                     
+                     // Update task status to completed with actual time and 100% progress
+                     await onUpdate(task.id, { 
+                       status: 'completed',
+                       progress: 100
+                     })
+                     
+                     console.log(`✅ Task ${task.id} completed successfully`)
+                   } catch (error) {
+                     console.error('❌ Error completing task:', error)
+                     toast({
+                       title: 'Error',
+                       description: 'Failed to complete task. Please try again.',
+                       variant: 'destructive',
+                     })
+                   }
+                 }}
+                 className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs font-medium rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+               >
+                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                 </svg>
+                 <span>Complete Task</span>
+               </button>
+             )}
             
-            {/* Reopen Button */}
-            {canReopen && (
-              <button
-                onClick={() => onUpdate(task.id, { status: 'pending' })}
-                className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-xs font-medium"
-              >
-                🔄 Reopen
-              </button>
-            )}
+                         {/* Progress Update Button */}
+             {task.status === 'in-progress' && (
+               <button
+                 onClick={async (e) => {
+                   e.stopPropagation()
+                   const newProgress = Math.min(task.progress + 25, 100)
+                   await onUpdate(task.id, { progress: newProgress })
+                 }}
+                 className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-medium rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+               >
+                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l2.293 2.293a1 1 0 001.414-1.414l-3-3z" clipRule="evenodd" />
+                 </svg>
+                 <span>+25%</span>
+               </button>
+             )}
+             
+             {/* Reopen Button */}
+             {canReopen && (
+               <button
+                 onClick={(e) => {
+                   e.stopPropagation()
+                   onUpdate(task.id, { status: 'pending' })
+                 }}
+                 className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+               >
+                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                   <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                 </svg>
+                 <span>Reopen</span>
+               </button>
+             )}
           </div>
           
-                     {/* Delete Button */}
-           <button
-             onClick={async () => {
-               if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
-                 await onDelete(task.id)
-               }
-             }}
-             className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 text-xs font-medium"
-           >
-             🗑️ Delete
-           </button>
+          {/* Delete Button - Available to all users */}
+          <button
+            onClick={async (e) => {
+              e.stopPropagation()
+              if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
+                await onDelete(task.id)
+              }
+            }}
+            className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs font-medium rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+          >
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <span>Delete</span>
+          </button>
         </div>
       </div>
     </div>

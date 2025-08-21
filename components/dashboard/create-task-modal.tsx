@@ -20,15 +20,15 @@ interface Task {
   title: string
   description: string
   project: string
-  duration: string
+  estimatedHours: number
   status: 'pending' | 'in-progress' | 'completed'
   deadline: string
   notes: string
   assignee: string
   priority: 'low' | 'medium' | 'high'
   dependencies?: string[]
-  estimatedHours?: number
   tags?: string[]
+  progress: number
 }
 
 interface CreateTaskModalProps {
@@ -43,14 +43,14 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
     title: '',
     description: '',
     project: '',
-    duration: '',
+    estimatedHours: 0,
     assignedOn: new Date().toISOString().split('T')[0],
     status: 'pending',
     deadline: '',
     notes: '',
     assignee: '',
     priority: 'medium',
-    estimatedHours: 0,
+    progress: 0,
     tags: [],
     dependencies: [],
     autoDelete: {
@@ -67,18 +67,25 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
         title: '',
         description: '',
         project: '',
-        duration: '',
+        estimatedHours: 0,
         assignedOn: new Date().toISOString().split('T')[0],
         status: 'pending',
         deadline: '',
         notes: '',
         assignee: '',
-        priority: 'medium'
+        priority: 'medium',
+        progress: 0,
+        tags: [],
+        dependencies: [],
+        autoDelete: {
+          enabled: false,
+          duration: 24
+        }
       })
     }
   }
 
-  const handleChange = (field: keyof Task, value: string) => {
+  const handleChange = (field: keyof Task, value: string | number | string[] | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -160,12 +167,15 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="duration">Duration</Label>
+                  <Label htmlFor="estimatedHours">Estimated Hours</Label>
                   <Input
-                    id="duration"
-                    value={formData.duration}
-                    onChange={(e) => handleChange('duration', e.target.value)}
-                    placeholder="e.g., 4 hours"
+                    id="estimatedHours"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={formData.estimatedHours}
+                    onChange={(e) => handleChange('estimatedHours', parseFloat(e.target.value) || 0)}
+                    placeholder="e.g., 8.5"
                   />
                 </div>
 
@@ -223,19 +233,25 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
                  />
                </div>
 
-               {/* Estimated Hours */}
+               {/* Progress */}
                <div className="space-y-2">
-                 <Label htmlFor="estimatedHours">Estimated Hours</Label>
+                 <Label htmlFor="progress">Initial Progress (%)</Label>
                  <Input
-                   id="estimatedHours"
+                   id="progress"
                    type="number"
                    min="0"
-                   step="0.5"
-                   value={formData.estimatedHours || 0}
-                   onChange={(e) => handleChange('estimatedHours', e.target.value)}
-                   placeholder="e.g., 8.5"
-                   className="bg-transparent border-white/20 text-white placeholder:text-gray-400 focus:border-neon-blue focus:ring-neon-blue/20"
+                   max="100"
+                   step="5"
+                   value={formData.progress}
+                   onChange={(e) => handleChange('progress', parseInt(e.target.value) || 0)}
+                   placeholder="0"
                  />
+                 <div className="w-full bg-gray-200 rounded-full h-2">
+                   <div 
+                     className="bg-neon-blue h-2 rounded-full transition-all duration-300" 
+                     style={{ width: `${formData.progress}%` }}
+                   ></div>
+                 </div>
                </div>
 
                {/* Tags */}
@@ -249,8 +265,19 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
                      setFormData(prev => ({ ...prev, tags }))
                    }}
                    placeholder="e.g., frontend, urgent, design"
-                   className="bg-transparent border-white/20 text-white placeholder:text-gray-400 focus:border-neon-blue focus:ring-neon-blue/20"
                  />
+                 {formData.tags && formData.tags.length > 0 && (
+                   <div className="flex flex-wrap gap-2 mt-2">
+                     {formData.tags.map((tag, index) => (
+                       <span 
+                         key={index}
+                         className="px-2 py-1 bg-neon-blue/20 text-neon-blue text-xs rounded-full border border-neon-blue/30"
+                       >
+                         #{tag}
+                       </span>
+                     ))}
+                   </div>
+                 )}
                </div>
 
                {/* Dependencies */}
@@ -273,7 +300,22 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
                        </option>
                      ))}
                  </select>
-                 <p className="text-xs text-gray-400">Hold Ctrl/Cmd to select multiple dependencies</p>
+                 <p className="text-xs text-muted-foreground">Hold Ctrl/Cmd to select multiple dependencies</p>
+                 {formData.dependencies && formData.dependencies.length > 0 && (
+                   <div className="flex flex-wrap gap-2 mt-2">
+                     {formData.dependencies.map((depId) => {
+                       const depTask = existingTasks.find(t => t.id === depId)
+                       return depTask ? (
+                         <span 
+                           key={depId}
+                           className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs rounded-full border border-orange-300 dark:border-orange-700"
+                         >
+                           📋 {depTask.title}
+                         </span>
+                       ) : null
+                     })}
+                   </div>
+                 )}
                </div>
 
               {/* Auto-Delete Settings */}

@@ -93,7 +93,15 @@ export function useAuth() {
       }
     }
 
+    // Add a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.log('⚠️ useAuth: Timeout reached, forcing isLoading to false')
+      setIsLoading(false)
+    }, 5000) // 5 second timeout
+
     checkAuth()
+
+    return () => clearTimeout(timeoutId)
     
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -206,6 +214,36 @@ export function useAuth() {
   const logout = async () => {
     await supabase.auth.signOut()
     setUser(null)
+  }
+
+  // Debug function to check authentication state
+  const debugAuth = async () => {
+    try {
+      console.log('🔍 useAuth.debugAuth: Checking authentication state...')
+      
+      // Check session
+      const { data: { session } } = await supabase.auth.getSession()
+      console.log('🔍 useAuth.debugAuth: Session:', session)
+      
+      // Check user
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      console.log('🔍 useAuth.debugAuth: Auth user:', authUser)
+      
+      // Check users table
+      if (authUser) {
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authUser.id)
+          .single()
+        console.log('🔍 useAuth.debugAuth: Users table data:', userData, 'Error:', error)
+      }
+      
+      return { session, authUser, currentUser: user, isLoading }
+    } catch (error: any) {
+      console.error('❌ useAuth.debugAuth: Error:', error)
+      return { error: error.message || 'Unknown error' }
+    }
   }
 
   const updateUser = async (updates: Partial<User>) => {
@@ -399,6 +437,7 @@ export function useAuth() {
     updateUser,
     createUser,
     createInvitation,
-    acceptInvitation
+    acceptInvitation,
+    debugAuth
   }
 }
