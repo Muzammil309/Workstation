@@ -15,12 +15,12 @@ interface Project {
   description: string
   status: 'planning' | 'active' | 'on-hold' | 'completed'
   progress: number
-  startDate: string
-  endDate: string
-  teamMembers: string[]
+  startdate: string
+  enddate: string
+  teammembers: string[]
   budget: string
   priority: 'low' | 'medium' | 'high'
-  tasksCount: number
+  taskscount: number
   completedtasks: number
   created_by: string
   created_at: string
@@ -101,13 +101,13 @@ export function ProjectsPanel() {
         name: newProject.name,
         description: newProject.description,
         status: newProject.status,
-        startDate: newProject.startDate,
-        endDate: newProject.endDate,
-        teamMembers: newProject.teamMembers.split(',').map(member => member.trim()).filter(Boolean),
+        startdate: newProject.startDate,
+        enddate: newProject.endDate,
+        teammembers: newProject.teamMembers.split(',').map(member => member.trim()).filter(Boolean),
         budget: newProject.budget,
         priority: newProject.priority,
         progress: 0,
-        tasksCount: 0,
+        taskscount: 0,
         completedtasks: 0,
         created_by: user?.id,
         created_at: new Date().toISOString()
@@ -275,9 +275,9 @@ export function ProjectsPanel() {
             <Users className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-medium text-muted-foreground">Team Members</span>
           </div>
-          <div className="text-2xl font-bold mt-2">
-            {new Set(projects.flatMap(p => p.teamMembers)).size}
-          </div>
+                     <div className="text-2xl font-bold mt-2">
+             {new Set(projects.flatMap(p => p.teammembers)).size}
+           </div>
         </motion.div>
       </div>
 
@@ -398,25 +398,25 @@ export function ProjectsPanel() {
 
             {/* Project Details */}
             <div className="space-y-2 mb-4">
-              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <Calendar className="w-4 h-4" />
-                <span>{new Date(project.startDate).toLocaleDateString()} - {new Date(project.endDate).toLocaleDateString()}</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <Target className="w-4 h-4" />
-                <span>{project.budget}</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <Users className="w-4 h-4" />
-                <span>{project.teamMembers.length} team members</span>
-              </div>
+                             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                 <Calendar className="w-4 h-4" />
+                 <span>{new Date(project.startdate).toLocaleDateString()} - {new Date(project.enddate).toLocaleDateString()}</span>
+               </div>
+               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                 <Target className="w-4 h-4" />
+                 <span>{project.budget}</span>
+               </div>
+               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                 <Users className="w-4 h-4" />
+                 <span>{project.teammembers.length} team members</span>
+               </div>
             </div>
 
-            {/* Tasks Summary */}
-            <div className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">Tasks: {project.completedtasks}/{project.tasksCount}</span>
-              <span className="text-muted-foreground">Created {new Date(project.created_at).toLocaleDateString()}</span>
-            </div>
+                         {/* Tasks Summary */}
+             <div className="flex items-center justify-between text-sm">
+               <span className="text-muted-foreground">Tasks: {project.completedtasks}/{project.taskscount}</span>
+               <span className="text-muted-foreground">Created {new Date(project.created_at).toLocaleDateString()}</span>
+             </div>
           </motion.div>
         ))}
       </div>
