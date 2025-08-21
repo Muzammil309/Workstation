@@ -1,12 +1,26 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Calendar, Clock, Users, Target, Plus, ChevronLeft, ChevronRight, Filter } from 'lucide-react'
+import { Calendar, Clock, Users, Target, Plus, ChevronLeft, ChevronRight, Filter, CalendarDays, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
-import { showNotification } from '@/lib/notifications'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/use-auth'
+
+interface Task {
+  id: string
+  title: string
+  description: string
+  deadline: string
+  assignee: string
+  priority: 'low' | 'medium' | 'high'
+  status: 'pending' | 'in-progress' | 'completed'
+  estimated_hours?: number
+  progress?: number
+  tags?: string[]
+}
 
 interface CalendarEvent {
   id: string
@@ -22,127 +36,16 @@ interface CalendarEvent {
   status: 'pending' | 'in-progress' | 'completed'
 }
 
-interface Task {
-  id: string
-  title: string
-  description: string
-  project: string
-  deadline: string
-  assignee: string
-  priority: 'low' | 'medium' | 'high'
-  status: 'pending' | 'in-progress' | 'completed'
-}
-
-const sampleEvents: CalendarEvent[] = [
-  {
-    id: '1',
-    title: 'Team Standup',
-    description: 'Daily team synchronization meeting',
-    date: '2024-01-20',
-    time: '09:00',
-    duration: 30,
-    type: 'meeting',
-    priority: 'medium',
-    assignees: ['John Doe', 'Jane Smith', 'Mike Johnson'],
-    project: 'Website Redesign',
-    status: 'pending'
-  },
-  {
-    id: '2',
-    title: 'Design Review',
-    description: 'Review new UI components',
-    date: '2024-01-20',
-    time: '14:00',
-    duration: 60,
-    type: 'meeting',
-    priority: 'high',
-    assignees: ['John Doe', 'Sarah Wilson'],
-    project: 'Website Redesign',
-    status: 'pending'
-  },
-  {
-    id: '3',
-    title: 'API Integration Deadline',
-    description: 'Complete backend API integration',
-    date: '2024-01-22',
-    time: '17:00',
-    duration: 0,
-    type: 'deadline',
-    priority: 'high',
-    assignees: ['Mike Johnson'],
-    project: 'Website Redesign',
-    status: 'in-progress'
-  },
-  {
-    id: '4',
-    title: 'Client Presentation',
-    description: 'Present progress to client',
-    date: '2024-01-25',
-    time: '10:00',
-    duration: 90,
-    type: 'meeting',
-    priority: 'high',
-    assignees: ['John Doe', 'Jane Smith'],
-    project: 'Website Redesign',
-    status: 'pending'
-  }
-]
-
-// Sample tasks for calendar integration
-const sampleTasks: Task[] = [
-  {
-    id: 'task1',
-    title: 'Design User Interface',
-    description: 'Create modern UI components for the dashboard',
-    project: 'Frontend Development',
-    deadline: '2024-01-20',
-    assignee: 'John Doe',
-    priority: 'high',
-    status: 'in-progress'
-  },
-  {
-    id: 'task2',
-    title: 'API Integration',
-    description: 'Integrate backend APIs with frontend',
-    project: 'Backend Development',
-    deadline: '2024-01-22',
-    assignee: 'Jane Smith',
-    priority: 'medium',
-    status: 'pending'
-  },
-  {
-    id: 'task3',
-    title: 'Database Schema Design',
-    description: 'Design and implement database structure',
-    project: 'Database',
-    deadline: '2024-01-18',
-    assignee: 'Mike Johnson',
-    priority: 'high',
-    status: 'completed'
-  },
-  {
-    id: 'task4',
-    title: 'User Testing',
-    description: 'Conduct user testing sessions',
-    project: 'Quality Assurance',
-    deadline: '2024-01-24',
-    assignee: 'Sarah Wilson',
-    priority: 'medium',
-    status: 'pending'
-  }
-]
-
-const eventTypeColors = {
-  task: 'bg-blue-500',
-  meeting: 'bg-green-500',
-  deadline: 'bg-red-500',
-  reminder: 'bg-yellow-500'
-}
-
 const priorityColors = {
   low: 'border-l-blue-500',
   medium: 'border-l-orange-500',
   high: 'border-l-red-500'
+}
+
+const statusColors = {
+  pending: 'bg-yellow-500',
+  'in-progress': 'bg-blue-500',
+  completed: 'bg-green-500'
 }
 
 export function CalendarView() {
@@ -151,31 +54,75 @@ export function CalendarView() {
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedAssignee, setSelectedAssignee] = useState<string>('all')
+  const [assignees, setAssignees] = useState<string[]>([])
   const { toast } = useToast()
+  const { user } = useAuth()
 
-  const filteredEvents = sampleEvents.filter(event => {
-    const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         event.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesType = filterType === 'all' || event.type === filterType
-    return matchesSearch && matchesType
+  // Load tasks from Supabase
+  useEffect(() => {
+    loadTasks()
+    loadAssignees()
+  }, [])
+
+  const loadTasks = async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('deadline', { ascending: true })
+
+      if (error) throw error
+      setTasks(data || [])
+    } catch (error) {
+      console.error('Error loading tasks:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load tasks",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadAssignees = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('name')
+        .eq('status', 'active')
+
+      if (error) throw error
+      const names = data?.map(user => user.name) || []
+      setAssignees(names)
+    } catch (error) {
+      console.error('Error loading assignees:', error)
+    }
+  }
+
+  const filteredTasks = tasks.filter(task => {
+    const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         task.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesType = filterType === 'all' || filterType === 'task'
+    const matchesAssignee = selectedAssignee === 'all' || task.assignee === selectedAssignee
+    return matchesSearch && matchesType && matchesAssignee
   })
 
-  const getEventsForDate = (date: string) => {
-    const events = filteredEvents.filter(event => event.date === date)
-    // Filter tasks by deadline date (format: YYYY-MM-DD)
-    const tasks = sampleTasks.filter(task => {
+  const getTasksForDate = (date: string) => {
+    return filteredTasks.filter(task => {
       const taskDeadline = new Date(task.deadline).toISOString().split('T')[0]
       return taskDeadline === date
     })
-    return { events, tasks }
   }
 
   // Get current date in Pakistan timezone
   const getCurrentDatePakistan = () => {
     const now = new Date()
-    // More reliable way to get Pakistan timezone date
     const pakistanTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Karachi"}))
-    // Ensure we get the correct date by creating a new Date object
     const pakistanDate = new Date(pakistanTime.getFullYear(), pakistanTime.getMonth(), pakistanTime.getDate())
     return pakistanDate
   }
@@ -207,12 +154,6 @@ export function CalendarView() {
     return date.toISOString().split('T')[0]
   }
 
-  const formatDatePakistan = (date: Date) => {
-    // Format date in Pakistan timezone
-    const pakistanDate = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Karachi"}))
-    return pakistanDate.toISOString().split('T')[0]
-  }
-
   const navigateMonth = (direction: 'prev' | 'next') => {
     setCurrentDate(prev => {
       const newDate = new Date(prev)
@@ -225,8 +166,52 @@ export function CalendarView() {
     })
   }
 
-  const getEventCount = (type: string) => {
-    return sampleEvents.filter(e => e.type === type).length
+  const getTaskCount = (type: string) => {
+    if (type === 'all') return tasks.length
+    if (type === 'overdue') {
+      const today = new Date()
+      return tasks.filter(task => new Date(task.deadline) < today && task.status !== 'completed').length
+    }
+    if (type === 'due-today') {
+      const today = new Date().toISOString().split('T')[0]
+      return tasks.filter(task => task.deadline === today).length
+    }
+    if (type === 'due-this-week') {
+      const today = new Date()
+      const endOfWeek = new Date(today)
+      endOfWeek.setDate(today.getDate() + 7)
+      return tasks.filter(task => {
+        const deadline = new Date(task.deadline)
+        return deadline >= today && deadline <= endOfWeek
+      }).length
+    }
+    return 0
+  }
+
+  const getOverdueTasks = () => {
+    const today = new Date()
+    return tasks.filter(task => 
+      new Date(task.deadline) < today && task.status !== 'completed'
+    ).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+  }
+
+  const getUpcomingDeadlines = () => {
+    const today = new Date()
+    const endOfMonth = new Date(today)
+    endOfMonth.setMonth(today.getMonth() + 1)
+    
+    return tasks.filter(task => {
+      const deadline = new Date(task.deadline)
+      return deadline >= today && deadline <= endOfMonth && task.status !== 'completed'
+    }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (
@@ -235,11 +220,11 @@ export function CalendarView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Calendar</h1>
-          <p className="text-muted-foreground">Schedule and manage your time</p>
+          <p className="text-muted-foreground">Track task deadlines and manage your schedule</p>
         </div>
         <Button onClick={() => {}} variant="neon">
           <Plus className="h-4 w-4 mr-2" />
-          New Event
+          New Task
         </Button>
       </div>
 
@@ -252,9 +237,9 @@ export function CalendarView() {
         >
           <div className="flex items-center space-x-2">
             <Calendar className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Total Events</span>
+            <span className="text-sm font-medium text-muted-foreground">Total Tasks</span>
           </div>
-          <div className="text-2xl font-bold mt-2">{sampleEvents.length}</div>
+          <div className="text-2xl font-bold mt-2">{getTaskCount('all')}</div>
         </motion.div>
 
         <motion.div
@@ -264,10 +249,10 @@ export function CalendarView() {
           className="bg-card border rounded-lg p-4"
         >
           <div className="flex items-center space-x-2">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Meetings</span>
+            <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground">Overdue</span>
           </div>
-          <div className="text-2xl font-bold mt-2">{getEventCount('meeting')}</div>
+          <div className="text-2xl font-bold mt-2 text-red-600">{getTaskCount('overdue')}</div>
         </motion.div>
 
         <motion.div
@@ -277,10 +262,10 @@ export function CalendarView() {
           className="bg-card border rounded-lg p-4"
         >
           <div className="flex items-center space-x-2">
-            <Target className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Deadlines</span>
+            <CalendarDays className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground">Due Today</span>
           </div>
-          <div className="text-2xl font-bold mt-2">{getEventCount('deadline')}</div>
+          <div className="text-2xl font-bold mt-2 text-orange-600">{getTaskCount('due-today')}</div>
         </motion.div>
 
         <motion.div
@@ -290,23 +275,23 @@ export function CalendarView() {
           className="bg-card border rounded-lg p-4"
         >
           <div className="flex items-center space-x-2">
-            <Users className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Task Deadlines</span>
+            <Clock className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground">This Week</span>
           </div>
-          <div className="text-2xl font-bold mt-2">{sampleTasks.length}</div>
+          <div className="text-2xl font-bold mt-2 text-blue-600">{getTaskCount('due-this-week')}</div>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.4 }}
           className="bg-card border rounded-lg p-4"
         >
           <div className="flex items-center space-x-2">
             <Users className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Tasks</span>
+            <span className="text-sm font-medium text-muted-foreground">Team Members</span>
           </div>
-          <div className="text-2xl font-bold mt-2">{getEventCount('task')}</div>
+          <div className="text-2xl font-bold mt-2">{assignees.length}</div>
         </motion.div>
       </div>
 
@@ -363,22 +348,29 @@ export function CalendarView() {
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
           <Input
-            placeholder="Search events..."
+            placeholder="Search tasks..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-sm"
           />
         </div>
         <select
+          value={selectedAssignee}
+          onChange={(e) => setSelectedAssignee(e.target.value)}
+          className="px-3 py-2 border border-input rounded-md bg-background text-sm"
+        >
+          <option value="all">All Assignees</option>
+          {assignees.map(assignee => (
+            <option key={assignee} value={assignee}>{assignee}</option>
+          ))}
+        </select>
+        <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
           className="px-3 py-2 border border-input rounded-md bg-background text-sm"
         >
           <option value="all">All Types</option>
-          <option value="task">Tasks</option>
-          <option value="meeting">Meetings</option>
-          <option value="deadline">Deadlines</option>
-          <option value="reminder">Reminders</option>
+          <option value="task">Tasks Only</option>
         </select>
       </div>
 
@@ -401,11 +393,6 @@ export function CalendarView() {
               year: 'numeric', 
               month: 'long', 
               day: 'numeric'
-            })} | Local: {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric'
             })}
           </span>
         </div>
@@ -414,10 +401,11 @@ export function CalendarView() {
         <div className="grid grid-cols-7">
           {getMonthDays().map((day, index) => {
             const todayPakistan = getCurrentDatePakistan()
-            // Fix: Compare the actual day numbers in Pakistan timezone, not formatted strings
             const isToday = day && day.getDate() === todayPakistan.getDate() && 
                            day.getMonth() === todayPakistan.getMonth() && 
                            day.getFullYear() === todayPakistan.getFullYear()
+            const isOverdue = day && day < todayPakistan
+            
             return (
               <div
                 key={index}
@@ -425,6 +413,8 @@ export function CalendarView() {
                   day ? 'bg-background' : 'bg-muted/20'
                 } ${
                   isToday ? 'ring-2 ring-blue-500 ring-opacity-50 bg-blue-50 dark:bg-blue-950/20' : ''
+                } ${
+                  isOverdue ? 'bg-red-50 dark:bg-red-950/20' : ''
                 }`}
               >
                 {day && (
@@ -432,37 +422,30 @@ export function CalendarView() {
                     <div className={`text-sm font-medium mb-2 ${
                       isToday 
                         ? 'bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto' 
+                        : isOverdue
+                        ? 'bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto'
                         : ''
                     }`}>
                       {day.getDate()}
                     </div>
                     <div className="space-y-1">
-                      {/* Show events first */}
-                      {getEventsForDate(formatDate(day)).events.slice(0, 2).map(event => (
-                        <div
-                          key={event.id}
-                          className={`text-xs p-1 rounded cursor-pointer ${eventTypeColors[event.type]} text-white truncate`}
-                          title={`${event.title} - ${event.time}`}
-                        >
-                          {event.title}
-                        </div>
-                      ))}
-                      
                       {/* Show task deadlines */}
-                      {getEventsForDate(formatDate(day)).tasks.slice(0, 2).map(task => (
+                      {getTasksForDate(formatDate(day)).slice(0, 3).map(task => (
                         <div
                           key={task.id}
-                          className={`text-xs p-1 rounded cursor-pointer bg-purple-500 text-white truncate border-l-2 ${priorityColors[task.priority]}`}
+                          className={`text-xs p-1 rounded cursor-pointer text-white truncate border-l-2 ${priorityColors[task.priority]} ${
+                            task.status === 'completed' ? 'opacity-60' : ''
+                          }`}
                           title={`${task.title} - ${task.assignee} (${task.status})`}
                         >
                           📋 {task.title}
                         </div>
                       ))}
                       
-                      {/* Show total count if more than 4 items */}
-                      {getEventsForDate(formatDate(day)).events.length + getEventsForDate(formatDate(day)).tasks.length > 4 && (
+                      {/* Show total count if more than 3 tasks */}
+                      {getTasksForDate(formatDate(day)).length > 3 && (
                         <div className="text-xs text-muted-foreground">
-                          +{getEventsForDate(formatDate(day)).events.length + getEventsForDate(formatDate(day)).tasks.length - 4} more
+                          +{getTasksForDate(formatDate(day)).length - 3} more
                         </div>
                       )}
                     </div>
@@ -474,37 +457,62 @@ export function CalendarView() {
         </div>
       </div>
 
-      {/* Upcoming Events */}
+      {/* Overdue Tasks Alert */}
+      {getOverdueTasks().length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-4"
+        >
+          <div className="flex items-center space-x-2 mb-3">
+            <AlertTriangle className="h-5 w-5 text-red-600" />
+            <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">Overdue Tasks</h3>
+          </div>
+          <div className="space-y-2">
+            {getOverdueTasks().slice(0, 5).map(task => (
+              <div key={task.id} className="flex items-center justify-between text-sm">
+                <span className="font-medium">{task.title}</span>
+                <span className="text-red-600">Due: {new Date(task.deadline).toLocaleDateString()}</span>
+              </div>
+            ))}
+            {getOverdueTasks().length > 5 && (
+              <div className="text-sm text-red-600">
+                +{getOverdueTasks().length - 5} more overdue tasks
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Upcoming Deadlines */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Upcoming Events</h3>
+        <h3 className="text-lg font-semibold">Upcoming Deadlines</h3>
         <div className="space-y-3">
-          {filteredEvents
-            .filter(event => new Date(event.date) >= getCurrentDatePakistan())
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          {getUpcomingDeadlines()
             .slice(0, 5)
-            .map(event => (
+            .map(task => (
               <motion.div
-                key={event.id}
+                key={task.id}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className={`bg-card border rounded-lg p-4 border-l-4 ${priorityColors[event.priority]}`}
+                className={`bg-card border rounded-lg p-4 border-l-4 ${priorityColors[task.priority]}`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium text-white ${eventTypeColors[event.type]}`}>
-                        {event.type}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium text-white ${statusColors[task.status]}`}>
+                        {task.status}
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {new Date(event.date).toLocaleDateString()} at {event.time}
+                        Due: {new Date(task.deadline).toLocaleDateString()}
                       </span>
                     </div>
-                    <h4 className="font-medium mb-1">{event.title}</h4>
-                    <p className="text-sm text-muted-foreground mb-2">{event.description}</p>
+                    <h4 className="font-medium mb-1">{task.title}</h4>
+                    <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
                     <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                      <span>Project: {event.project}</span>
-                      <span>Duration: {event.duration}min</span>
-                      <span>Assignees: {event.assignees.join(', ')}</span>
+                      <span>Assignee: {task.assignee}</span>
+                      {task.estimated_hours && <span>Est: {task.estimated_hours}h</span>}
+                      {task.progress !== undefined && <span>Progress: {task.progress}%</span>}
                     </div>
                   </div>
                 </div>

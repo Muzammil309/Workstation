@@ -5,98 +5,26 @@ import { motion } from 'framer-motion'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ComposedChart } from 'recharts'
 import { TrendingUp, Users, Clock, Target, CheckCircle, AlertCircle, Calendar, Filter, Download, RefreshCw, User, Award, Zap, TrendingDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { supabase } from '@/lib/supabase'
 
-// Enhanced sample data for comprehensive analytics
-const userTaskData = [
-  {
-    userId: '1',
-    name: 'John Doe',
-    role: 'Frontend Developer',
-    totalTasks: 15,
-    completedTasks: 12,
-    inProgressTasks: 2,
-    pendingTasks: 1,
-    avgCompletionTime: 6.2,
-    productivity: 88.5,
-    weeklyProgress: [
-      { week: 'Week 1', completed: 3, total: 4 },
-      { week: 'Week 2', completed: 4, total: 5 },
-      { week: 'Week 3', completed: 3, total: 4 },
-      { week: 'Week 4', completed: 2, total: 2 }
-    ],
-    projectBreakdown: [
-      { project: 'Website Redesign', tasks: 8, completed: 7 },
-      { project: 'Mobile App', tasks: 4, completed: 3 },
-      { project: 'API Integration', tasks: 3, completed: 2 }
-    ]
-  },
-  {
-    userId: '2',
-    name: 'Jane Smith',
-    role: 'Backend Developer',
-    totalTasks: 12,
-    completedTasks: 9,
-    inProgressTasks: 2,
-    pendingTasks: 1,
-    avgCompletionTime: 7.8,
-    productivity: 75.0,
-    weeklyProgress: [
-      { week: 'Week 1', completed: 2, total: 3 },
-      { week: 'Week 2', completed: 3, total: 4 },
-      { week: 'Week 3', completed: 2, total: 3 },
-      { week: 'Week 4', completed: 2, total: 2 }
-    ],
-    projectBreakdown: [
-      { project: 'Backend API', tasks: 6, completed: 5 },
-      { project: 'Database', tasks: 4, completed: 3 },
-      { project: 'Testing', tasks: 2, completed: 1 }
-    ]
-  },
-  {
-    userId: '3',
-    name: 'Mike Johnson',
-    role: 'Database Engineer',
-    totalTasks: 8,
-    completedTasks: 8,
-    inProgressTasks: 0,
-    pendingTasks: 0,
-    avgCompletionTime: 4.5,
-    productivity: 100.0,
-    weeklyProgress: [
-      { week: 'Week 1', completed: 2, total: 2 },
-      { week: 'Week 2', completed: 2, total: 2 },
-      { week: 'Week 3', completed: 2, total: 2 },
-      { week: 'Week 4', completed: 2, total: 2 }
-    ],
-    projectBreakdown: [
-      { project: 'Database Migration', tasks: 4, completed: 4 },
-      { project: 'Schema Design', tasks: 2, completed: 2 },
-      { project: 'Optimization', tasks: 2, completed: 2 }
-    ]
-  },
-  {
-    userId: '4',
-    name: 'Sarah Wilson',
-    role: 'QA Engineer',
-    totalTasks: 10,
-    completedTasks: 6,
-    inProgressTasks: 3,
-    pendingTasks: 1,
-    avgCompletionTime: 8.1,
-    productivity: 60.0,
-    weeklyProgress: [
-      { week: 'Week 1', completed: 1, total: 2 },
-      { week: 'Week 2', completed: 2, total: 3 },
-      { week: 'Week 3', completed: 2, total: 3 },
-      { week: 'Week 4', completed: 1, total: 2 }
-    ],
-    projectBreakdown: [
-      { project: 'User Testing', tasks: 4, completed: 2 },
-      { project: 'Automation', tasks: 3, completed: 2 },
-      { project: 'Bug Fixes', tasks: 3, completed: 2 }
-    ]
-  }
-]
+// Real team data structure for analytics
+interface UserTaskData {
+  userId: string
+  name: string
+  role: string
+  department: string
+  totalTasks: number
+  completedTasks: number
+  inProgressTasks: number
+  pendingTasks: number
+  avgCompletionTime: number
+  productivity: number
+  weeklyProgress: Array<{ week: string; completed: number; total: number }>
+  projectBreakdown: Array<{ project: string; tasks: number; completed: number }>
+}
+
+// Initialize empty array - will be populated with real data
+const [userTaskData, setUserTaskData] = useState<UserTaskData[]>([])
 
 const taskStatusData = [
   { name: 'Pending', value: 12, color: '#f59e0b' },
@@ -134,6 +62,85 @@ export function AnalyticsDashboard() {
   const [selectedUser, setSelectedUser] = useState<string>('all')
   const [dateRange, setDateRange] = useState('30')
   const [isLoading, setIsLoading] = useState(false)
+  const [userTaskData, setUserTaskData] = useState<UserTaskData[]>([])
+  const [isDataLoading, setIsDataLoading] = useState(true)
+
+  // Load real data from Supabase
+  useEffect(() => {
+    loadAnalyticsData()
+  }, [])
+
+  const loadAnalyticsData = async () => {
+    try {
+      setIsDataLoading(true)
+      
+      // Load team members
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('status', 'active')
+      
+      if (usersError) throw usersError
+
+      // Load tasks
+      const { data: tasks, error: tasksError } = await supabase
+        .from('tasks')
+        .select('*')
+      
+      if (tasksError) throw tasksError
+
+      // Process data for analytics
+      const analyticsData = users?.map(user => {
+        const userTasks = tasks?.filter(task => task.assignee === user.name) || []
+        const completedTasks = userTasks.filter(task => task.status === 'completed').length
+        const inProgressTasks = userTasks.filter(task => task.status === 'in-progress').length
+        const pendingTasks = userTasks.filter(task => task.status === 'pending').length
+        const totalTasks = userTasks.length
+        
+        // Calculate productivity
+        const productivity = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
+        
+        // Calculate average completion time (placeholder for now)
+        const avgCompletionTime = 6.5 // This would need actual time tracking data
+        
+        // Generate weekly progress (placeholder)
+        const weeklyProgress = [
+          { week: 'Week 1', completed: Math.floor(completedTasks * 0.3), total: Math.floor(totalTasks * 0.3) },
+          { week: 'Week 2', completed: Math.floor(completedTasks * 0.4), total: Math.floor(totalTasks * 0.4) },
+          { week: 'Week 3', completed: Math.floor(completedTasks * 0.2), total: Math.floor(totalTasks * 0.2) },
+          { week: 'Week 4', completed: Math.floor(completedTasks * 0.1), total: Math.floor(totalTasks * 0.1) }
+        ]
+        
+        // Generate project breakdown (placeholder)
+        const projectBreakdown = [
+          { project: 'Development', tasks: Math.floor(totalTasks * 0.6), completed: Math.floor(completedTasks * 0.6) },
+          { project: 'Design', tasks: Math.floor(totalTasks * 0.3), completed: Math.floor(completedTasks * 0.3) },
+          { project: 'Testing', tasks: Math.floor(totalTasks * 0.1), completed: Math.floor(completedTasks * 0.1) }
+        ]
+
+        return {
+          userId: user.id,
+          name: user.name,
+          role: user.role,
+          department: user.department,
+          totalTasks,
+          completedTasks,
+          inProgressTasks,
+          pendingTasks,
+          avgCompletionTime,
+          productivity,
+          weeklyProgress,
+          projectBreakdown
+        }
+      }) || []
+
+      setUserTaskData(analyticsData)
+    } catch (error) {
+      console.error('Error loading analytics data:', error)
+    } finally {
+      setIsDataLoading(false)
+    }
+  }
 
   const stats = [
     {
@@ -202,6 +209,17 @@ export function AnalyticsDashboard() {
   const refreshData = () => {
     setIsLoading(true)
     setTimeout(() => setIsLoading(false), 1000)
+  }
+
+  if (isDataLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading analytics data...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
