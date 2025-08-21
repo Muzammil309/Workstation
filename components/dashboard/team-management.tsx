@@ -408,9 +408,8 @@ export function TeamManagement() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1"
+                  className="flex-1 text-red-600 hover:text-red-700"
                   onClick={() => handleDeleteMember(member.id, member.name)}
-                  className="text-red-600 hover:text-red-700"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Remove
