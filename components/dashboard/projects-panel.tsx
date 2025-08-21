@@ -45,6 +45,10 @@ export function ProjectsPanel() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [viewingProject, setViewingProject] = useState<Project | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [newProject, setNewProject] = useState({
     name: '',
@@ -131,6 +135,65 @@ export function ProjectsPanel() {
       toast({
         title: "Error",
         description: "Failed to create project: " + error.message,
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleViewProject = (project: Project) => {
+    setViewingProject(project)
+    setIsViewModalOpen(true)
+  }
+
+  const handleEditProject = (project: Project) => {
+    setEditingProject(project)
+    setNewProject({
+      name: project.name,
+      description: project.description,
+      status: project.status,
+      startDate: project.startdate,
+      endDate: project.enddate,
+      teamMembers: project.teammembers.join(', '),
+      budget: project.budget,
+      priority: project.priority
+    })
+    setIsEditModalOpen(true)
+  }
+
+  const handleUpdateProject = async () => {
+    if (!editingProject) return
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          name: newProject.name,
+          description: newProject.description,
+          status: newProject.status,
+          startdate: newProject.startDate,
+          enddate: newProject.endDate,
+          teammembers: newProject.teamMembers.split(',').map(member => member.trim()).filter(Boolean),
+          budget: newProject.budget,
+          priority: newProject.priority,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingProject.id)
+
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: "Project updated successfully",
+      })
+
+      setIsEditModalOpen(false)
+      setEditingProject(null)
+      resetForm()
+      await loadProjects()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to update project: " + error.message,
         variant: "destructive"
       })
     }
@@ -339,20 +402,26 @@ export function ProjectsPanel() {
                       className="absolute right-0 top-full mt-1 w-48 bg-card border rounded-lg shadow-lg z-10"
                     >
                       <div className="py-1">
-                        <button
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center space-x-2"
-                          onClick={() => setOpenDropdown(null)}
-                        >
-                          <Eye className="w-4 h-4" />
-                          <span>View Details</span>
-                        </button>
-                        <button
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center space-x-2"
-                          onClick={() => setOpenDropdown(null)}
-                        >
-                          <Edit className="w-4 h-4" />
-                          <span>Edit Project</span>
-                        </button>
+                                                 <button
+                           className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center space-x-2"
+                           onClick={() => {
+                             setOpenDropdown(null)
+                             handleViewProject(project)
+                           }}
+                         >
+                           <Eye className="w-4 h-4" />
+                           <span>View Details</span>
+                         </button>
+                         <button
+                           className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center space-x-2"
+                           onClick={() => {
+                             setOpenDropdown(null)
+                             handleEditProject(project)
+                           }}
+                         >
+                           <Edit className="w-4 h-4" />
+                           <span>Edit Project</span>
+                         </button>
                         {user?.role === 'admin' && (
                           <button
                             className="w-full px-4 py-2 text-left text-sm hover:bg-red-500 hover:text-white flex items-center space-x-2"
@@ -548,8 +617,252 @@ export function ProjectsPanel() {
               </div>
             </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
+                 )}
+       </AnimatePresence>
+
+       {/* View Project Modal */}
+       <AnimatePresence>
+         {isViewModalOpen && viewingProject && (
+           <motion.div
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+           >
+             <motion.div
+               initial={{ scale: 0.95, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               exit={{ scale: 0.95, opacity: 0 }}
+               className="bg-background border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+             >
+               <div className="flex items-center justify-between mb-6">
+                 <h2 className="text-2xl font-bold">Project Details</h2>
+                 <Button variant="ghost" size="icon" onClick={() => setIsViewModalOpen(false)}>
+                   <X className="h-5 w-5" />
+                 </Button>
+               </div>
+
+               <div className="space-y-6">
+                 {/* Project Header */}
+                 <div>
+                   <h3 className="text-xl font-semibold mb-2">{viewingProject.name}</h3>
+                   <p className="text-muted-foreground">{viewingProject.description}</p>
+                 </div>
+
+                 {/* Status and Priority */}
+                 <div className="flex items-center space-x-2">
+                   <span className={`px-3 py-1 rounded-full text-sm font-medium text-white ${statusColors[viewingProject.status]}`}>
+                     {viewingProject.status}
+                   </span>
+                   <span className={`px-3 py-1 rounded-full text-sm font-medium text-white ${priorityColors[viewingProject.priority]}`}>
+                     {viewingProject.priority}
+                   </span>
+                 </div>
+
+                 {/* Progress */}
+                 <div>
+                   <div className="flex items-center justify-between text-sm mb-2">
+                     <span className="font-medium">Progress</span>
+                     <span>{viewingProject.progress}%</span>
+                   </div>
+                   <div className="w-full bg-muted rounded-full h-3">
+                     <div 
+                       className="bg-primary h-3 rounded-full transition-all duration-300" 
+                       style={{ width: `${viewingProject.progress}%` }}
+                     />
+                   </div>
+                 </div>
+
+                 {/* Project Details Grid */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="space-y-3">
+                     <div>
+                       <label className="text-sm font-medium text-muted-foreground">Start Date</label>
+                       <p className="text-sm">{new Date(viewingProject.startdate).toLocaleDateString()}</p>
+                     </div>
+                     <div>
+                       <label className="text-sm font-medium text-muted-foreground">End Date</label>
+                       <p className="text-sm">{new Date(viewingProject.enddate).toLocaleDateString()}</p>
+                     </div>
+                     <div>
+                       <label className="text-sm font-medium text-muted-foreground">Budget</label>
+                       <p className="text-sm">{viewingProject.budget}</p>
+                     </div>
+                   </div>
+                   <div className="space-y-3">
+                     <div>
+                       <label className="text-sm font-medium text-muted-foreground">Team Members</label>
+                       <div className="flex flex-wrap gap-1 mt-1">
+                         {viewingProject.teammembers.map((member, index) => (
+                           <span key={index} className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-full">
+                             {member}
+                           </span>
+                         ))}
+                       </div>
+                     </div>
+                     <div>
+                       <label className="text-sm font-medium text-muted-foreground">Tasks</label>
+                       <p className="text-sm">{viewingProject.completedtasks}/{viewingProject.taskscount}</p>
+                     </div>
+                     <div>
+                       <label className="text-sm font-medium text-muted-foreground">Created</label>
+                       <p className="text-sm">{new Date(viewingProject.created_at).toLocaleDateString()}</p>
+                     </div>
+                   </div>
+                 </div>
+
+                 {/* Action Buttons */}
+                 <div className="flex items-center justify-end space-x-3 pt-4 border-t">
+                   <Button
+                     variant="outline"
+                     onClick={() => {
+                       setIsViewModalOpen(false)
+                       handleEditProject(viewingProject)
+                     }}
+                   >
+                     <Edit className="w-4 h-4 mr-2" />
+                     Edit Project
+                   </Button>
+                   <Button onClick={() => setIsViewModalOpen(false)}>
+                     Close
+                   </Button>
+                 </div>
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+
+       {/* Edit Project Modal */}
+       <AnimatePresence>
+         {isEditModalOpen && editingProject && (
+           <motion.div
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+           >
+             <motion.div
+               initial={{ scale: 0.95, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               exit={{ scale: 0.95, opacity: 0 }}
+               className="bg-background border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+             >
+               <div className="flex items-center justify-between mb-6">
+                 <h2 className="text-2xl font-bold">Edit Project</h2>
+                 <Button variant="ghost" size="icon" onClick={() => setIsEditModalOpen(false)}>
+                   <X className="h-5 w-5" />
+                 </Button>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                 <div className="space-y-2">
+                   <label className="text-sm font-medium">Project Name *</label>
+                   <Input
+                     placeholder="Enter project name"
+                     value={newProject.name}
+                     onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                   />
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="text-sm font-medium">Status</label>
+                   <select
+                     value={newProject.status}
+                     onChange={(e) => setNewProject({ ...newProject, status: e.target.value as 'planning' | 'active' | 'on-hold' | 'completed' })}
+                     className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                   >
+                     <option value="planning">Planning</option>
+                     <option value="active">Active</option>
+                     <option value="on-hold">On Hold</option>
+                     <option value="completed">Completed</option>
+                   </select>
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="text-sm font-medium">Start Date *</label>
+                   <Input
+                     type="date"
+                     value={newProject.startDate}
+                     onChange={(e) => setNewProject({ ...newProject, startDate: e.target.value })}
+                   />
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="text-sm font-medium">End Date *</label>
+                   <Input
+                     type="date"
+                     value={newProject.endDate}
+                     onChange={(e) => setNewProject({ ...newProject, endDate: e.target.value })}
+                   />
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="text-sm font-medium">Budget *</label>
+                   <Input
+                     placeholder="e.g., $15,000"
+                     value={newProject.budget}
+                     onChange={(e) => setNewProject({ ...newProject, budget: e.target.value })}
+                   />
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="text-sm font-medium">Priority</label>
+                   <select
+                     value={newProject.priority}
+                     onChange={(e) => setNewProject({ ...newProject, priority: e.target.value as 'low' | 'medium' | 'high' })}
+                     className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                   >
+                     <option value="low">Low</option>
+                     <option value="medium">Medium</option>
+                     <option value="high">High</option>
+                   </select>
+                 </div>
+
+                 <div className="space-y-2 md:col-span-2">
+                   <label className="text-sm font-medium">Description *</label>
+                   <textarea
+                     placeholder="Enter project description"
+                     value={newProject.description}
+                     onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                     className="w-full px-3 py-2 border rounded-md bg-background text-sm min-h-[80px] resize-none"
+                   />
+                 </div>
+
+                 <div className="space-y-2 md:col-span-2">
+                   <label className="text-sm font-medium">Team Members</label>
+                   <Input
+                     placeholder="Enter team members (comma-separated)"
+                     value={newProject.teamMembers}
+                     onChange={(e) => setNewProject({ ...newProject, teamMembers: e.target.value })}
+                   />
+                   <p className="text-xs text-muted-foreground">Separate multiple team members with commas</p>
+                 </div>
+               </div>
+
+               <div className="flex items-center justify-end space-x-3">
+                 <Button
+                   variant="outline"
+                   onClick={() => {
+                     setIsEditModalOpen(false)
+                     setEditingProject(null)
+                     resetForm()
+                   }}
+                 >
+                   Cancel
+                 </Button>
+                 <Button
+                   onClick={handleUpdateProject}
+                   className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+                 >
+                   <Save className="h-4 h-4 mr-2" />
+                   Update Project
+                 </Button>
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+     </div>
+   )
+ }
