@@ -5,6 +5,7 @@ import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, Fold
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
+import { useLanguage } from '@/lib/language-context'
 
 interface SidebarProps {
   activeTab: string
@@ -82,9 +83,30 @@ const navigationItems = [
 
 export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isCollapsed, onToggleCollapse }: SidebarProps) {
   const { theme } = useTheme()
+  const { t } = useLanguage()
   const filteredItems = navigationItems.filter(item => 
     !item.adminOnly || userRole === 'admin'
   )
+
+  const handleNewTask = () => {
+    onTabChange('tasks')
+    // You can also trigger a modal or form here
+  }
+
+  const handleNewProject = () => {
+    onTabChange('projects')
+    // You can also trigger a modal or form here
+  }
+
+  const handleScheduleEvent = () => {
+    onTabChange('calendar')
+    // You can also trigger a modal or form here
+  }
+
+  const handleAddTeamMember = () => {
+    onTabChange('team')
+    // You can also trigger a modal or form here
+  }
 
   return (
     <>
@@ -194,25 +216,28 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
             <Button 
               className={cn("w-full", isCollapsed ? "px-2" : "")} 
               variant="neon"
-              title={isCollapsed ? "New Task" : undefined}
+              title={isCollapsed ? t('newTask') : undefined}
+              onClick={handleNewTask}
             >
               <Plus className="h-4 w-4" />
-              {!isCollapsed && <span className="ml-2">New Task</span>}
+              {!isCollapsed && <span className="ml-2">{t('newTask')}</span>}
             </Button>
             
             <Button 
               className={cn("w-full", isCollapsed ? "px-2" : "")} 
               variant="outline"
-              title={isCollapsed ? "New Project" : undefined}
+              title={isCollapsed ? t('newProject') : undefined}
+              onClick={handleNewProject}
             >
               <FolderOpen className="h-4 w-4" />
-              {!isCollapsed && <span className="ml-2">New Project</span>}
+              {!isCollapsed && <span className="ml-2">{t('newProject')}</span>}
             </Button>
             
             <Button 
               className={cn("w-full", isCollapsed ? "px-2" : "")} 
               variant="outline"
               title={isCollapsed ? "Schedule Event" : undefined}
+              onClick={handleScheduleEvent}
             >
               <Calendar className="h-4 w-4" />
               {!isCollapsed && <span className="ml-2">Schedule Event</span>}
@@ -223,6 +248,7 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
                 className={cn("w-full", isCollapsed ? "px-2" : "")} 
                 variant="outline"
                 title={isCollapsed ? "Add Team Member" : undefined}
+                onClick={handleAddTeamMember}
               >
                 <Users className="h-4 w-4" />
                 {!isCollapsed && <span className="ml-2">Add Team Member</span>}

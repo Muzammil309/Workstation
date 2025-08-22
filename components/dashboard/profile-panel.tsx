@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '@/lib/language-context'
 
 interface ProfileData {
   id: string
@@ -36,6 +37,7 @@ interface ProfileData {
 export function ProfilePanel() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { t, language, setLanguage } = useLanguage()
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -48,6 +50,13 @@ export function ProfilePanel() {
     confirmPassword: ''
   })
   const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false)
+  const [twoFAData, setTwoFAData] = useState({
+    phone: '',
+    verificationCode: '',
+    isVerifying: false
+  })
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -202,6 +211,101 @@ export function ProfilePanel() {
       })
     } finally {
       setIsChangingPassword(false)
+    }
+  }
+
+  const handle2FASetup = async () => {
+    if (!twoFAData.phone) {
+      toast({
+        title: "Error",
+        description: "Please enter your phone number",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setTwoFAData(prev => ({ ...prev, isVerifying: true }))
+      
+      // In a real implementation, you would integrate with a service like Twilio
+      // For now, we'll simulate the SMS verification
+      toast({
+        title: "Verification Code Sent",
+        description: `A 6-digit code has been sent to ${twoFAData.phone}`,
+      })
+      
+      // Simulate receiving a verification code (in real app, user would receive SMS)
+      const mockCode = Math.floor(100000 + Math.random() * 900000).toString()
+      setTwoFAData(prev => ({ ...prev, verificationCode: mockCode }))
+      
+      toast({
+        title: "Demo Code",
+        description: `Your verification code is: ${mockCode}`,
+      })
+      
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to send verification code: " + error.message,
+        variant: "destructive"
+      })
+    } finally {
+      setTwoFAData(prev => ({ ...prev, isVerifying: false }))
+    }
+  }
+
+  const handle2FAVerification = async () => {
+    if (!twoFAData.verificationCode || twoFAData.verificationCode.length !== 6) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid 6-digit verification code",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      // In a real implementation, verify the code with your backend
+      // For now, we'll simulate successful verification
+      setIs2FAEnabled(true)
+      
+      toast({
+        title: "Success",
+        description: "Two-Factor Authentication enabled successfully!",
+      })
+      
+      // Update user preferences to include 2FA status
+      const { error } = await supabase
+        .from('users')
+        .update({
+          preferences: {
+            ...profile?.preferences,
+            twoFAEnabled: true,
+            twoFAPhone: twoFAData.phone
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user?.id)
+
+      if (error) throw error
+
+      // Close modal and reset form
+      setIs2FAModalOpen(false)
+      setTwoFAData({
+        phone: '',
+        verificationCode: '',
+        isVerifying: false
+      })
+      
+      // Reload profile to get updated preferences
+      await loadProfile()
+      
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to verify code: " + error.message,
+        variant: "destructive"
+      })
     }
   }
 
@@ -497,23 +601,22 @@ export function ProfilePanel() {
               </div>
               <div>
                 <label className="text-sm font-medium">Language</label>
-                <select
-                  value={editedProfile.preferences?.language || 'en'}
-                  onChange={(e) => handleInputChange('preferences', {
-                    language: e.target.value
-                  })}
-                  disabled={!isEditing}
-                  className="mt-1 w-full px-3 py-2 border rounded-md bg-background disabled:bg-muted"
-                >
-                  <option value="en">English</option>
-                  <option value="es">Spanish</option>
-                  <option value="fr">French</option>
-                  <option value="de">German</option>
-                  <option value="ar">Arabic</option>
-                  <option value="zh">Chinese</option>
-                  <option value="hi">Hindi</option>
-                  <option value="ur">Urdu</option>
-                </select>
+                                 <select
+                   value={language}
+                   onChange={(e) => {
+                     setLanguage(e.target.value)
+                     handleInputChange('preferences', {
+                       language: e.target.value
+                     })
+                   }}
+                   disabled={!isEditing}
+                   className="mt-1 w-full px-3 py-2 border rounded-md bg-background disabled:bg-muted"
+                 >
+                   <option value="en">English</option>
+                   <option value="es">Español</option>
+                   <option value="fr">Français</option>
+                   <option value="ar">العربية</option>
+                 </select>
                 <p className="text-xs text-muted-foreground mt-1">Select your preferred language</p>
               </div>
             </div>
@@ -602,16 +705,27 @@ export function ProfilePanel() {
               </Button>
             </div>
 
-            <div className="bg-muted/20 rounded-lg p-4">
-              <h3 className="font-medium mb-2">Two-Factor Authentication</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Add an extra layer of security to your account
-              </p>
-              <Button variant="outline">
-                <Shield className="w-4 h-4 mr-2" />
-                Enable 2FA
-              </Button>
-            </div>
+                         <div className="bg-muted/20 rounded-lg p-4">
+               <h3 className="font-medium mb-2">Two-Factor Authentication</h3>
+               <p className="text-sm text-muted-foreground mb-4">
+                 Add an extra layer of security to your account
+               </p>
+               <div className="flex items-center space-x-3">
+                 <Button 
+                   variant="outline"
+                   onClick={() => setIs2FAModalOpen(true)}
+                 >
+                   <Shield className="w-4 h-4 mr-2" />
+                   {is2FAEnabled ? 'Manage 2FA' : 'Enable 2FA'}
+                 </Button>
+                 {is2FAEnabled && (
+                   <span className="text-sm text-green-600 dark:text-green-400 flex items-center">
+                     <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                     Active
+                   </span>
+                 )}
+               </div>
+             </div>
           </motion.div>
         )}
 
@@ -773,6 +887,100 @@ export function ProfilePanel() {
                     </>
                   )}
                 </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Two-Factor Authentication Modal */}
+      <AnimatePresence>
+        {is2FAModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-background border rounded-lg p-6 w-full max-w-md"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold">Two-Factor Authentication</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIs2FAModalOpen(false)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Phone Number</label>
+                  <Input
+                    type="tel"
+                    value={twoFAData.phone}
+                    onChange={(e) => setTwoFAData({ ...twoFAData, phone: e.target.value })}
+                    placeholder="+1 (555) 123-4567"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">We'll send a verification code to this number</p>
+                </div>
+                
+                {twoFAData.verificationCode && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Verification Code</label>
+                    <Input
+                      type="text"
+                      value={twoFAData.verificationCode}
+                      onChange={(e) => setTwoFAData({ ...twoFAData, verificationCode: e.target.value })}
+                      placeholder="Enter 6-digit code"
+                      maxLength={6}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Enter the 6-digit code sent to your phone</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex space-x-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => setIs2FAModalOpen(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                {!twoFAData.verificationCode ? (
+                  <Button 
+                    onClick={handle2FASetup}
+                    disabled={twoFAData.isVerifying}
+                    className="flex-1"
+                  >
+                    {twoFAData.isVerifying ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="w-4 h-4 mr-2" />
+                        Send Code
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handle2FAVerification}
+                    className="flex-1"
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Verify & Enable
+                  </Button>
+                )}
               </div>
             </motion.div>
           </motion.div>

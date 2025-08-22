@@ -16,6 +16,7 @@ import { TemplatesPanel } from '@/components/dashboard/templates-panel'
 import { IntegrationsPanel } from '@/components/dashboard/integrations-panel'
 import { ProfilePanel } from '@/components/dashboard/profile-panel'
 import { useAuth } from '@/hooks/use-auth'
+import { LanguageProvider } from '@/lib/language-context'
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('tasks')
@@ -110,46 +111,48 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <Sidebar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        userRole={user.role}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-      />
-
-      {/* Main Content */}
-      <div className={cn(
-        "flex-1 flex flex-col transition-all duration-300 ease-in-out",
-        isSidebarCollapsed ? "ml-16" : "ml-80"
-      )}>
-        <DashboardHeader
-          user={{
-            firstName: user.firstName || user.name?.split(' ')[0] || 'User',
-            lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
-            email: user.email,
-            role: user.role
-          }}
-          onMenuClick={() => setIsSidebarOpen(true)}
-          onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          isSidebarCollapsed={isSidebarCollapsed}
+    <LanguageProvider>
+      <div className="min-h-screen bg-background flex">
+        {/* Sidebar */}
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          userRole={user.role}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         />
-        
-        <main className="flex-1 p-6 overflow-auto">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {renderContent()}
-          </motion.div>
-        </main>
+
+        {/* Main Content */}
+        <div className={cn(
+          "flex-1 flex flex-col transition-all duration-300 ease-in-out",
+          isSidebarCollapsed ? "ml-16" : "ml-80"
+        )}>
+          <DashboardHeader
+            user={{
+              firstName: user.firstName || user.name?.split(' ')[0] || 'User',
+              lastName: user.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+              email: user.email,
+              role: user.role
+            }}
+            onMenuClick={() => setIsSidebarOpen(true)}
+            onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            isSidebarCollapsed={isSidebarCollapsed}
+          />
+          
+          <main className="flex-1 p-6 overflow-auto">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {renderContent()}
+            </motion.div>
+          </main>
+        </div>
       </div>
-    </div>
+    </LanguageProvider>
   )
 }
