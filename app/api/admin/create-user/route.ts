@@ -4,6 +4,17 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
+    // Security check: Ensure service role key is properly set
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (!serviceRoleKey || serviceRoleKey === 'your_service_role_key_here' || serviceRoleKey.length < 100) {
+      console.error('Invalid or missing service role key')
+      return NextResponse.json(
+        { error: 'Server configuration error: Invalid service role key' },
+        { status: 500 }
+      )
+    }
+
     const { name, email, password, role, department, phone, location, bio, skills } = await request.json()
 
     // Validate required fields
@@ -14,12 +25,37 @@ export async function POST(request: Request) {
       )
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      )
+    }
+
+    // Validate password strength
+    if (password.length < 6) {
+      return NextResponse.json(
+        { error: 'Password must be at least 6 characters long' },
+        { status: 400 }
+      )
+    }
+
+    // Validate role
+    if (!['admin', 'user'].includes(role)) {
+      return NextResponse.json(
+        { error: 'Invalid role. Must be either "admin" or "user"' },
+        { status: 400 }
+      )
+    }
+
     // Create Supabase client with service role
     const cookieStore = await cookies()
     
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      serviceRoleKey,
       {
         cookies: {
           getAll() {
@@ -40,6 +76,24 @@ export async function POST(request: Request) {
       }
     )
 
+    // Test connection with service role key
+    try {
+      const { data: testData, error: testError } = await supabase.auth.admin.listUsers()
+      if (testError) {
+        console.error('Service role key test failed:', testError)
+        return NextResponse.json(
+          { error: 'Server configuration error: Invalid service role key or permissions' },
+          { status: 500 }
+        )
+      }
+    } catch (testError) {
+      console.error('Service role key connection test failed:', testError)
+      return NextResponse.json(
+        { error: 'Server configuration error: Cannot connect with service role key' },
+        { status: 500 }
+      )
+    }
+
     // Step 1: Create user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email.trim().toLowerCase(),
@@ -54,6 +108,14 @@ export async function POST(request: Request) {
 
     if (authError) {
       console.error('Auth creation error:', authError)
+      
+      if (authError.message.includes('duplicate')) {
+        return NextResponse.json(
+          { error: 'User with this email already exists' },
+          { status: 409 }
+        )
+      }
+      
       throw new Error(`Authentication error: ${authError.message}`)
     }
 
@@ -132,6 +194,8 @@ export async function POST(request: Request) {
         errorMessage = "Admin privileges required. Please check your Supabase settings"
       } else if (error.message.includes('invalid')) {
         errorMessage = "Invalid input data provided"
+      } else if (error.message.includes('configuration')) {
+        errorMessage = "Server configuration error. Please contact administrator"
       } else {
         errorMessage = error.message
       }
