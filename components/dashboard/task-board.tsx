@@ -642,17 +642,17 @@ export function TaskBoard() {
                           )}
                         </div>
                       </td>
-                                             <td className="p-3">
-                         <div className="text-sm">
-                           {task.assignees && task.assignees.length > 0 ? (
-                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                               {task.assignees.length} member{task.assignees.length > 1 ? 's' : ''}
-                             </span>
-                           ) : (
-                             <span className="text-muted-foreground">Unassigned</span>
-                           )}
-                         </div>
-                       </td>
+                                                                    <td className="p-3">
+                          <div className="text-sm">
+                            {task.assignees && task.assignees.length > 0 ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                {task.assignees.length === 1 ? 'Assigned to member' : `${task.assignees.length} members`}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">Unassigned</span>
+                            )}
+                          </div>
+                        </td>
                       <td className="p-3">
                         <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                           task.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
@@ -1145,17 +1145,17 @@ function SortableTaskCard({
         
         {/* Task Details Section */}
         <div className="space-y-3">
-                     {/* Assigned Users */}
-           {task.assignees && task.assignees.length > 0 && (
-             <div className="flex items-center space-x-2 text-sm">
-               <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
-                 {task.assignees.length > 1 ? 'M' : task.assignees[0].charAt(0).toUpperCase()}
-               </div>
-               <span className="text-gray-600 dark:text-gray-300 font-medium">
-                 {task.assignees.length > 1 ? `${task.assignees.length} members` : task.assignees[0]}
-               </span>
-             </div>
-           )}
+                              {/* Assigned Users */}
+            {task.assignees && task.assignees.length > 0 && (
+              <div className="flex items-center space-x-2 text-sm">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
+                  {task.assignees.length > 1 ? 'M' : (assignedUser?.name?.charAt(0) || '?')}
+                </div>
+                <span className="text-gray-600 dark:text-gray-300 font-medium">
+                  {task.assignees.length > 1 ? `${task.assignees.length} members` : (assignedUser?.name || 'Unknown User')}
+                </span>
+              </div>
+            )}
           
           {/* Time Estimation and Actual Time */}
           <div className="flex items-center justify-between text-sm">

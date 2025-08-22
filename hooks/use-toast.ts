@@ -5,6 +5,9 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
+// Import notification sounds
+import { playNotificationSound } from "@/lib/notifications"
+
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
 
@@ -139,8 +142,17 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
-function toast({ ...props }: Toast) {
+function toast({ variant = "default", ...props }: Toast) {
   const id = genId()
+
+  // Play notification sound based on toast variant
+  if (variant === "destructive") {
+    playNotificationSound("alert") // High-alert sound for errors
+  } else if (variant === "default") {
+    playNotificationSound("urgent") // Urgent sound for success/info
+  } else {
+    playNotificationSound("default") // Standard sound for other variants
+  }
 
   const update = (props: ToasterToast) =>
     dispatch({
@@ -153,6 +165,7 @@ function toast({ ...props }: Toast) {
     type: "ADD_TOAST",
     toast: {
       ...props,
+      variant,
       id,
       open: true,
       onOpenChange: (open) => {
