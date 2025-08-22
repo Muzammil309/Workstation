@@ -1,236 +1,630 @@
-"use client"
+'use client'
 
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { Users, Settings, Shield, Activity, UserPlus, Search, MoreVertical, Edit, Trash2, Eye } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useAuth } from '@/hooks/use-auth'
+import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useToast } from '@/hooks/use-toast'
-import { UserManagement } from '@/components/dashboard/user-management'
-import { useAuth } from '@/hooks/use-auth'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { supabase } from '@/lib/supabase'
 
 interface User {
   id: string
-  firstName: string
-  lastName: string
+  name: string
   email: string
-  role: 'user' | 'admin'
+  role: 'admin' | 'user'
+  department: string
   status: 'active' | 'inactive'
-  lastLogin: string
-  tasksAssigned: number
-  tasksCompleted: number
+  phone?: string
+  location?: string
+  bio?: string
+  skills?: string[]
+  created_at: string
 }
 
-const sampleUsers: User[] = [
-  {
-    id: '1',
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john@taskflow.com',
-    role: 'admin',
-    status: 'active',
-    lastLogin: '2024-01-20',
-    tasksAssigned: 15,
-    tasksCompleted: 12
-  },
-  {
-    id: '2',
-    firstName: 'Jane',
-    lastName: 'Smith',
-    email: 'jane@taskflow.com',
-    role: 'user',
-    status: 'active',
-    lastLogin: '2024-01-19',
-    tasksAssigned: 8,
-    tasksCompleted: 6
-  },
-  {
-    id: '3',
-    firstName: 'Mike',
-    lastName: 'Johnson',
-    email: 'mike@taskflow.com',
-    role: 'user',
-    status: 'inactive',
-    lastLogin: '2024-01-15',
-    tasksAssigned: 5,
-    tasksCompleted: 3
-  }
-]
+interface NewUser {
+  name: string
+  email: string
+  password: string
+  role: 'admin' | 'user'
+  department: string
+  phone: string
+  location: string
+  bio: string
+  skills: string[]
+}
 
-export function AdminPanel() {
-  const [activeTab, setActiveTab] = useState('users')
+export default function AdminPanel() {
+  const { user } = useAuth()
   const { toast } = useToast()
-  const { user: currentUser } = useAuth()
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [showAddUser, setShowAddUser] = useState(false)
+  const [newUser, setNewUser] = useState<NewUser>({
+    name: '',
+    email: '',
+    password: '',
+    role: 'user',
+    department: 'Development',
+    phone: '',
+    location: '',
+    bio: '',
+    skills: []
+  })
+  const [skillInput, setSkillInput] = useState('')
 
-  // Only admins can access this panel
-  if (currentUser?.role !== 'admin') {
+  // Check if current user is admin
+  if (!user || user.role !== 'admin') {
     return (
-      <div className="p-6 bg-red-500/10 border border-red-500/30 rounded-lg text-center">
-        <Shield className="w-12 h-12 text-red-400 mx-auto mb-4" />
-        <h3 className="text-xl font-bold text-white mb-2">Access Denied</h3>
-        <p className="text-gray-300">You don't have permission to access the admin panel.</p>
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold text-red-800">Access Denied</h2>
+          <p className="text-red-600">You need admin privileges to access this panel.</p>
+        </div>
       </div>
     )
   }
 
-  const stats = [
-    {
-      title: 'System Status',
-      value: 'Healthy',
-      icon: Settings,
-      color: 'text-green-600'
-    },
-    {
-      title: 'Database',
-      value: 'Connected',
-      icon: Activity,
-      color: 'text-green-600'
-    },
-    {
-      title: 'Security',
-      value: 'Enabled',
-      icon: Shield,
-      color: 'text-purple-600'
-    },
-    {
-      title: 'Last Backup',
-      value: new Date().toLocaleDateString(),
-      icon: Activity,
-      color: 'text-blue-600'
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setUsers(data || [])
+    } catch (error) {
+      console.error('Error fetching users:', error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch users",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
     }
-  ]
+  }
+
+  const updateUserRole = async (userId: string, newRole: 'admin' | 'user') => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ role: newRole })
+        .eq('id', userId)
+
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: `User role updated to ${newRole}`,
+      })
+
+      // Update local state
+      setUsers(users.map(u => 
+        u.id === userId ? { ...u, role: newRole } : u
+      ))
+    } catch (error) {
+      console.error('Error updating user role:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update user role",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const updateUserStatus = async (userId: string, newStatus: 'active' | 'inactive') => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ status: newStatus })
+        .eq('id', userId)
+
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: `User status updated to ${newStatus}`,
+      })
+
+      // Update local state
+      setUsers(users.map(u => 
+        u.id === userId ? { ...u, status: newStatus } : u
+      ))
+    } catch (error) {
+      console.error('Error updating user status:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update user status",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const saveUserProfile = async (updatedUser: User) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          name: updatedUser.name,
+          department: updatedUser.department,
+          phone: updatedUser.phone,
+          location: updatedUser.location,
+          bio: updatedUser.bio,
+          skills: updatedUser.skills
+        })
+        .eq('id', updatedUser.id)
+
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: "User profile updated successfully",
+      })
+
+      // Update local state
+      setUsers(users.map(u => 
+        u.id === updatedUser.id ? updatedUser : u
+      ))
+      setEditingUser(null)
+    } catch (error) {
+      console.error('Error updating user profile:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update user profile",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const addNewUser = async () => {
+    try {
+      // First create user in auth.users
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: newUser.email,
+        password: newUser.password,
+        email_confirm: true
+      })
+
+      if (authError) throw authError
+
+      // Then create profile in public.users
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          department: newUser.department,
+          status: 'active',
+          phone: newUser.phone,
+          location: newUser.location,
+          bio: newUser.bio,
+          skills: newUser.skills,
+          preferences: {
+            theme: 'system',
+            notifications: true,
+            emailUpdates: false,
+            taskUpdates: true,
+            projectUpdates: true,
+            language: 'en'
+          }
+        })
+
+      if (profileError) throw profileError
+
+      toast({
+        title: "Success",
+        description: "New user created successfully",
+      })
+
+      // Reset form and refresh users
+      setNewUser({
+        name: '',
+        email: '',
+        password: '',
+        role: 'user',
+        department: 'Development',
+        phone: '',
+        location: '',
+        bio: '',
+        skills: []
+      })
+      setShowAddUser(false)
+      fetchUsers()
+    } catch (error) {
+      console.error('Error creating new user:', error)
+      toast({
+        title: "Error",
+        description: "Failed to create new user",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const addSkill = () => {
+    if (skillInput.trim() && !newUser.skills.includes(skillInput.trim())) {
+      setNewUser({
+        ...newUser,
+        skills: [...newUser.skills, skillInput.trim()]
+      })
+      setSkillInput('')
+    }
+  }
+
+  const removeSkill = (skillToRemove: string) => {
+    setNewUser({
+      ...newUser,
+      skills: newUser.skills.filter(skill => skill !== skillToRemove)
+    })
+  }
+
+  const departments = ['Development', 'Design', 'Marketing', 'Management', 'Sales', 'Support']
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2">Loading users...</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Admin Panel</h1>
-        <p className="text-muted-foreground">Manage users, system settings, and monitor performance</p>
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Admin Panel - User Management</h1>
+        <Button onClick={() => setShowAddUser(true)} className="bg-blue-600 hover:bg-blue-700">
+          + Add New User
+        </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon
-          return (
-            <motion.div
-              key={stat.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-card border rounded-lg p-6"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                  <p className="text-2xl font-bold">{stat.value}</p>
-                </div>
-                <Icon className={`h-8 w-8 ${stat.color}`} />
+      {/* Add New User Modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">Add New User</h2>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                  placeholder="Enter full name"
+                />
               </div>
-            </motion.div>
-          )
-        })}
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b">
-        <nav className="flex space-x-8">
-          {[
-            { id: 'users', label: 'User Management', icon: Users },
-            { id: 'settings', label: 'System Settings', icon: Settings },
-            { id: 'logs', label: 'Activity Logs', icon: Activity }
-          ].map((tab) => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
+              
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                  placeholder="Enter email address"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                  placeholder="Enter password"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="role">Role</Label>
+                <select
+                  id="role"
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({...newUser, role: e.target.value as 'admin' | 'user'})}
+                  className="w-full px-3 py-2 border rounded-md bg-background"
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              
+              <div>
+                <Label htmlFor="department">Department</Label>
+                <select
+                  id="department"
+                  value={newUser.department}
+                  onChange={(e) => setNewUser({...newUser, department: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-md bg-background"
+                >
+                  {departments.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  value={newUser.phone}
+                  onChange={(e) => setNewUser({...newUser, phone: e.target.value})}
+                  placeholder="Enter phone number"
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  value={newUser.location}
+                  onChange={(e) => setNewUser({...newUser, location: e.target.value})}
+                  placeholder="Enter location"
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <Label htmlFor="bio">Bio</Label>
+                <Textarea
+                  id="bio"
+                  value={newUser.bio}
+                  onChange={(e) => setNewUser({...newUser, bio: e.target.value})}
+                  placeholder="Enter user bio"
+                  rows={3}
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <Label htmlFor="skills">Skills</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="skills"
+                    value={skillInput}
+                    onChange={(e) => setSkillInput(e.target.value)}
+                    placeholder="Add a skill"
+                    onKeyPress={(e) => e.key === 'Enter' && addSkill()}
+                  />
+                  <Button onClick={addSkill} type="button" className="bg-green-600 hover:bg-green-700">
+                    Add
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {newUser.skills.map((skill, index) => (
+                    <span
+                      key={index}
+                      className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center gap-1"
+                    >
+                      {skill}
+                      <button
+                        onClick={() => removeSkill(skill)}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-2 mt-6">
+              <Button onClick={addNewUser} className="bg-blue-600 hover:bg-blue-700">
+                Create User
+              </Button>
+              <Button 
+                onClick={() => setShowAddUser(false)} 
+                variant="outline"
               >
-                <Icon className="h-4 w-4" />
-                <span>{tab.label}</span>
-              </button>
-            )
-          })}
-        </nav>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Users List */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  User
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Role
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Department
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              {users.map((user) => (
+                <tr key={user.id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 h-10 w-10">
+                        <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
+                          {user.name.charAt(0).toUpperCase()}
+                        </div>
+                      </div>
+                      <div className="ml-4">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          {user.name}
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          {user.email}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <select
+                      value={user.role}
+                      onChange={(e) => updateUserRole(user.id, e.target.value as 'admin' | 'user')}
+                      className="px-2 py-1 text-sm border rounded-md bg-background"
+                      disabled={user.email === 'admin@changemechanics.pk'} // Protect main admin
+                    >
+                      <option value="user">User</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingUser?.id === user.id ? (
+                      <select
+                        value={editingUser.department}
+                        onChange={(e) => setEditingUser({...editingUser, department: e.target.value})}
+                        className="px-2 py-1 text-sm border rounded-md bg-background"
+                      >
+                        {departments.map(dept => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-sm text-gray-900 dark:text-white">
+                        {user.department}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <select
+                      value={user.status}
+                      onChange={(e) => updateUserStatus(user.id, e.target.value as 'active' | 'inactive')}
+                      className="px-2 py-1 text-sm border rounded-md bg-background"
+                      disabled={user.email === 'admin@changemechanics.pk'} // Protect main admin
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex gap-2">
+                      {editingUser?.id === user.id ? (
+                        <>
+                          <Button
+                            onClick={() => saveUserProfile(editingUser)}
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            onClick={() => setEditingUser(null)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          onClick={() => setEditingUser(user)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Edit
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Content */}
-      {activeTab === 'users' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-4"
-        >
-          <UserManagement />
-        </motion.div>
-      )}
-
-      {activeTab === 'settings' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          <div className="bg-card border rounded-lg p-6">
-            <h3 className="text-lg font-semibold mb-4">System Configuration</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Email Notifications</p>
-                  <p className="text-sm text-muted-foreground">Send email notifications for task updates</p>
-                </div>
-                <input type="checkbox" className="w-4 h-4" defaultChecked />
+      {/* Edit User Profile Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">Edit User Profile: {editingUser.name}</h2>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-name">Full Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editingUser.name}
+                  onChange={(e) => setEditingUser({...editingUser, name: e.target.value})}
+                />
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Real-time Updates</p>
-                  <p className="text-sm text-muted-foreground">Enable real-time task synchronization</p>
-                </div>
-                <input type="checkbox" className="w-4 h-4" defaultChecked />
+              
+              <div>
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  value={editingUser.email}
+                  disabled
+                  className="bg-gray-100"
+                />
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Auto-backup</p>
-                  <p className="text-sm text-muted-foreground">Automatically backup data daily</p>
-                </div>
-                <input type="checkbox" className="w-4 h-4" />
+              
+              <div>
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  value={editingUser.phone || ''}
+                  onChange={(e) => setEditingUser({...editingUser, phone: e.target.value})}
+                  placeholder="Enter phone number"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="edit-location">Location</Label>
+                <Input
+                  id="edit-location"
+                  value={editingUser.location || ''}
+                  onChange={(e) => setEditingUser({...editingUser, location: e.target.value})}
+                  placeholder="Enter location"
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <Label htmlFor="edit-bio">Bio</Label>
+                <Textarea
+                  id="edit-bio"
+                  value={editingUser.bio || ''}
+                  onChange={(e) => setEditingUser({...editingUser, bio: e.target.value})}
+                  placeholder="Enter user bio"
+                  rows={3}
+                />
               </div>
             </div>
-          </div>
-        </motion.div>
-      )}
-
-      {activeTab === 'logs' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          <div className="bg-card border rounded-lg p-6">
-            <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
-            <div className="space-y-3">
-              {[
-                { action: 'User login', user: 'john@taskflow.com', time: '2 minutes ago', type: 'info' },
-                { action: 'Task created', user: 'jane@taskflow.com', time: '5 minutes ago', type: 'success' },
-                { action: 'User role updated', user: 'admin@taskflow.com', time: '10 minutes ago', type: 'warning' },
-                { action: 'System backup', user: 'system', time: '1 hour ago', type: 'info' }
-              ].map((log, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                  <div>
-                    <p className="font-medium">{log.action}</p>
-                    <p className="text-sm text-muted-foreground">by {log.user}</p>
-                  </div>
-                  <span className="text-sm text-muted-foreground">{log.time}</span>
-                </div>
-              ))}
+            
+            <div className="flex gap-2 mt-6">
+              <Button onClick={() => saveUserProfile(editingUser)} className="bg-blue-600 hover:bg-blue-700">
+                Save Changes
+              </Button>
+              <Button 
+                onClick={() => setEditingUser(null)} 
+                variant="outline"
+              >
+                Cancel
+              </Button>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
     </div>
   )
