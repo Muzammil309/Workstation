@@ -616,6 +616,7 @@ export function ProfilePanel() {
                    <option value="es">Español</option>
                    <option value="fr">Français</option>
                    <option value="ar">العربية</option>
+                   <option value="ur">اردو</option>
                  </select>
                 <p className="text-xs text-muted-foreground mt-1">Select your preferred language</p>
               </div>
