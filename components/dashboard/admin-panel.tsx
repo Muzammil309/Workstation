@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { supabase } from '@/lib/supabase'
-import { Trash2, Edit, Save, X, UserPlus, Shield, User } from 'lucide-react'
+import { Trash2, Edit, Save, X, UserPlus, Shield, User, AlertTriangle } from 'lucide-react'
 
 interface User {
   id: string
@@ -194,6 +194,18 @@ export default function AdminPanel() {
     }
 
     try {
+      // First delete from auth.users if possible
+      try {
+        const { error: authError } = await supabase.auth.admin.deleteUser(userId)
+        if (authError) {
+          console.warn('Could not delete from auth.users:', authError)
+          // Continue with profile deletion even if auth deletion fails
+        }
+      } catch (authError) {
+        console.warn('Auth deletion failed, continuing with profile deletion:', authError)
+      }
+
+      // Then delete profile from public.users
       const { error } = await supabase
         .from('users')
         .delete()
@@ -248,47 +260,24 @@ export default function AdminPanel() {
         return
       }
 
-      // Create user directly in the database
-      const { data, error } = await supabase
-        .from('users')
-        .insert({
-          name: newUser.name.trim(),
-          email: newUser.email.trim().toLowerCase(),
-          role: newUser.role,
-          department: newUser.department,
-          status: 'active',
-          phone: newUser.phone.trim() || null,
-          location: newUser.location.trim() || null,
-          bio: newUser.bio.trim() || null,
-          skills: newUser.skills.length > 0 ? newUser.skills : [],
-          preferences: {
-            theme: 'system',
-            notifications: true,
-            emailUpdates: false,
-            taskUpdates: true,
-            projectUpdates: true,
-            language: 'en',
-            notificationSounds: {
-              default: 'default',
-              urgent: 'urgent',
-              alert: 'alert'
-            },
-            soundVolume: 50,
-            soundsEnabled: true,
-            vibrateEnabled: false
-          }
-        })
-        .select()
-        .single()
+      // Create user via secure API route (server-side with service role)
+      const response = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newUser)
+      })
 
-      if (error) {
-        console.error('Database error:', error)
-        throw new Error(`Database error: ${error.message}`)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create user')
       }
 
       toast({
         title: "Success",
-        description: `New ${newUser.role} user "${newUser.name}" created successfully!`,
+        description: `New ${newUser.role} user "${newUser.name}" created successfully! They can now log in with their email and password.`,
       })
 
       // Reset form and refresh users
@@ -305,11 +294,12 @@ export default function AdminPanel() {
       })
       setShowAddUser(false)
       await fetchUsers()
+
     } catch (error: any) {
       console.error('Error creating new user:', error)
       toast({
         title: "Error",
-        description: error.message || "Failed to create new user. Please check the console for details.",
+        description: error.message || "Failed to create new user",
         variant: "destructive"
       })
     } finally {
@@ -365,7 +355,7 @@ export default function AdminPanel() {
         <div>
           <h1 className="text-2xl font-bold">Admin Panel - User Management</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Manage users, roles, and permissions. You have complete control over user accounts.
+            Manage users, roles, and permissions with secure authentication.
           </p>
         </div>
         <Button 
@@ -375,6 +365,20 @@ export default function AdminPanel() {
           <UserPlus className="w-4 h-4" />
           + Add New User
         </Button>
+      </div>
+
+      {/* Security Notice */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <Shield className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="font-medium text-blue-800">Secure User Creation</h3>
+            <p className="text-sm text-blue-700 mt-1">
+              Users are created with proper Supabase authentication. They can immediately log in with their email and password.
+              All passwords are securely hashed and stored by Supabase Auth.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Add New User Modal */}
