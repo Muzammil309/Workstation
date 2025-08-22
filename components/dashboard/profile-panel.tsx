@@ -71,15 +71,20 @@ export function ProfilePanel() {
   const previewSound = (soundType: string) => {
     try {
       // Import and use the enhanced notification sound system
-      const { playNotificationSound } = require('@/lib/notifications')
+      const { playNotificationSound, isValidSoundType } = require('@/lib/notifications')
       
-      // Map sound types to notification sound types
-      let notificationType: 'default' | 'urgent' | 'alert' = 'default'
-      if (soundType === 'urgent') notificationType = 'urgent'
-      else if (soundType === 'alert') notificationType = 'alert'
+      // Validate the sound type before playing
+      if (!isValidSoundType(soundType)) {
+        toast({
+          title: "Invalid Sound",
+          description: `${soundType} is not a valid sound type`,
+          variant: "destructive",
+        })
+        return
+      }
       
-      // Play the selected sound
-      playNotificationSound(notificationType)
+      // Play the selected sound directly - all sound types are supported
+      playNotificationSound(soundType as any)
       
       toast({
         title: "Sound Preview",
@@ -870,22 +875,45 @@ export function ProfilePanel() {
               <div className="mt-6 p-4 bg-muted/30 rounded-lg">
                 <h5 className="text-sm font-medium mb-3">Sound Preview</h5>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {['default', 'bell', 'chime', 'ding', 'pop', 'swoosh', 'alert', 'urgent'].map((sound) => (
-                    <button
-                      key={sound}
-                      type="button"
-                      onClick={() => previewSound(sound)}
-                      disabled={!isEditing}
-                      className="flex flex-col items-center p-3 border rounded-lg hover:bg-background transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2 group-hover:bg-blue-200 dark:group-hover:bg-blue-800/30 transition-colors">
-                        <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium capitalize">{sound}</span>
-                    </button>
-                  ))}
+                  {(() => {
+                    try {
+                      const { getAvailableSoundTypes } = require('@/lib/notifications')
+                      return getAvailableSoundTypes().map((sound) => (
+                        <button
+                          key={sound}
+                          type="button"
+                          onClick={() => previewSound(sound)}
+                          disabled={!isEditing}
+                          className="flex flex-col items-center p-3 border rounded-lg hover:bg-background transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2 group-hover:bg-blue-200 dark:group-hover:bg-blue-800/30 transition-colors">
+                            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1.1.1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            </svg>
+                          </div>
+                          <span className="text-xs font-medium capitalize">{sound}</span>
+                        </button>
+                      ))
+                                         } catch (error) {
+                       // Fallback to hardcoded array if import fails
+                       return ['default', 'bell', 'chime', 'ding', 'pop', 'swoosh', 'alert', 'urgent'].map((sound: string) => (
+                         <button
+                           key={sound}
+                           type="button"
+                           onClick={() => previewSound(sound)}
+                           disabled={!isEditing}
+                           className="flex flex-col items-center p-3 border rounded-lg hover:bg-background transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
+                         >
+                           <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2 group-hover:bg-blue-200 dark:group-hover:bg-blue-800/30 transition-colors">
+                             <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                             </svg>
+                           </div>
+                           <span className="text-xs font-medium capitalize">{sound}</span>
+                         </button>
+                       ))
+                     }
+                  })()}
                 </div>
               </div>
             </div>

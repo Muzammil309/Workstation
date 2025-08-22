@@ -176,9 +176,16 @@ export const playCustomNotificationSound = (soundType: string, userPreferences?:
   // If user has custom sound preferences, use them
   if (userPreferences?.notificationSounds?.[soundType]) {
     const customSound = userPreferences.notificationSounds[soundType]
-    playNotificationSound(customSound as any)
+    // Validate that the custom sound is a valid sound type
+    const validSounds = ['default', 'urgent', 'alert', 'bell', 'chime', 'ding', 'pop', 'swoosh']
+    if (validSounds.includes(customSound)) {
+      playNotificationSound(customSound as any)
+    } else {
+      // Fall back to the requested sound type if custom sound is invalid
+      playNotificationSound(soundType as any)
+    }
   } else {
-    // Fall back to default sound for the type
+    // Fall back to the requested sound type
     playNotificationSound(soundType as any)
   }
 }
@@ -186,4 +193,15 @@ export const playCustomNotificationSound = (soundType: string, userPreferences?:
 // Function to get user's preferred sound for a notification type
 export const getUserPreferredSound = (soundType: string, userPreferences?: any): string => {
   return userPreferences?.notificationSounds?.[soundType] || soundType
+}
+
+// Function to validate if a sound type is supported
+export const isValidSoundType = (soundType: string): boolean => {
+  const validSounds = ['default', 'urgent', 'alert', 'bell', 'chime', 'ding', 'pop', 'swoosh']
+  return validSounds.includes(soundType)
+}
+
+// Function to get all available sound types
+export const getAvailableSoundTypes = (): string[] => {
+  return ['default', 'urgent', 'alert', 'bell', 'chime', 'ding', 'pop', 'swoosh']
 }
