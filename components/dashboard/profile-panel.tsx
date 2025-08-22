@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { User, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Save, X, Camera, Shield, Key, Bell, Palette, Globe, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -689,7 +689,6 @@ export function ProfilePanel() {
           </motion.div>
         )}
       </div>
-    </div>
 
       {/* Password Change Modal */}
       <AnimatePresence>
