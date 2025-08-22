@@ -55,21 +55,12 @@ export default function AdminPanel() {
   })
   const [skillInput, setSkillInput] = useState('')
 
-  // Check if current user is admin
-  if (!user || user.role !== 'admin') {
-    return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <h2 className="text-lg font-semibold text-red-800">Access Denied</h2>
-          <p className="text-red-600">You need admin privileges to access this panel.</p>
-        </div>
-      </div>
-    )
-  }
-
   useEffect(() => {
-    fetchUsers()
-  }, [])
+    // Only fetch users if user is admin
+    if (user && user.role === 'admin') {
+      fetchUsers()
+    }
+  }, [user])
 
   const fetchUsers = async () => {
     try {
@@ -269,6 +260,18 @@ export default function AdminPanel() {
   }
 
   const departments = ['Development', 'Design', 'Marketing', 'Management', 'Sales', 'Support']
+
+  // Check if current user is admin - moved after hooks
+  if (!user || user.role !== 'admin') {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold text-red-800">Access Denied</h2>
+          <p className="text-red-600">You need admin privileges to access this panel.</p>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
