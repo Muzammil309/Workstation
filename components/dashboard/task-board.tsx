@@ -15,12 +15,15 @@ interface Task {
   progress: number
   estimated_hours: number
   deadline: string
-  assignees: string[]
+  assignees: string[] // Array of user IDs
   tags: string[]
   dependencies: string[]
   created_by: string
   created_at: string
   updated_at: string
+  assigned_on?: string
+  actual_time?: string
+  notes?: string
 }
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
@@ -183,7 +186,9 @@ export function TaskBoard() {
           dependencies: taskData.dependencies || [],
           created_by: user.id,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          assigned_on: taskData.assignedOn || null,
+          notes: taskData.notes || null
         })
          .select()
          .single()
