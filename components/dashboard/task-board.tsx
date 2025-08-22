@@ -128,6 +128,10 @@ export function TaskBoard() {
         throw new Error('Task description must be less than 1000 characters')
       }
 
+      if (!taskData.project_id) {
+        throw new Error('Project selection is required')
+      }
+
       // Validate status
       const validStatuses = ['pending', 'in-progress', 'completed']
       if (taskData.status && !validStatuses.includes(taskData.status)) {
@@ -140,24 +144,25 @@ export function TaskBoard() {
         throw new Error('Invalid task priority')
       }
 
-             // Use direct Supabase call with modal data
-       const { data, error } = await supabase
-         .from('tasks')
-         .insert({
-           title: taskData.title.trim(),
-           description: taskData.description?.trim() || '',
-           status: taskData.status || 'pending',
-           priority: taskData.priority || 'medium',
-           progress: taskData.progress || 0,
-           estimated_hours: taskData.estimatedHours || 0,
-           deadline: taskData.deadline || null,
-           assignee: taskData.assignee || '',
-           tags: taskData.tags || [],
-           dependencies: taskData.dependencies || [],
-           created_by: user.id,
-           created_at: new Date().toISOString(),
-           updated_at: new Date().toISOString()
-         })
+      // Use direct Supabase call with modal data
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({
+          title: taskData.title.trim(),
+          description: taskData.description?.trim() || '',
+          project_id: taskData.project_id,
+          status: taskData.status || 'pending',
+          priority: taskData.priority || 'medium',
+          progress: taskData.progress || 0,
+          estimated_hours: taskData.estimatedHours || 0,
+          deadline: taskData.deadline || null,
+          assignee: taskData.assignee || '',
+          tags: taskData.tags || [],
+          dependencies: taskData.dependencies || [],
+          created_by: user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
          .select()
          .single()
         
@@ -762,18 +767,20 @@ export function TaskBoard() {
                             </button>
                           )}
                           
-                          {/* Delete Button */}
-                          <button
-                            onClick={async () => {
-                              if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
-                                await handleDeleteTask(task.id)
-                              }
-                            }}
-                            className="p-1 text-red-600 hover:text-red-700 transition-colors"
-                            title="Delete Task"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {/* Delete Button - Admin only */}
+                          {user?.role === 'admin' && (
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
+                                  await handleDeleteTask(task.id)
+                                }
+                              }}
+                              className="p-1 text-red-600 hover:text-red-700 transition-colors"
+                              title="Delete Task"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

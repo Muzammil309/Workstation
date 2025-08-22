@@ -9,17 +9,33 @@
  * - This ensures no accidental task deletion
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus } from 'lucide-react'
+import { X, Plus, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { supabase } from '@/lib/supabase'
+
+interface Project {
+  id: string
+  name: string
+  description: string
+  status: string
+}
+
+interface User {
+  id: string
+  name: string
+  email: string
+  role: string
+  department: string
+}
 
 interface Task {
   title: string
   description: string
-  project: string
+  project_id: string
   estimatedHours: number
   status: 'pending' | 'in-progress' | 'completed'
   deadline: string
@@ -42,7 +58,7 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
   const [formData, setFormData] = useState<Omit<Task, 'id' | 'assignedOn'> & { assignedOn?: string; autoDelete?: { enabled: boolean; duration: number } }>({
     title: '',
     description: '',
-    project: '',
+    project_id: '',
     estimatedHours: 0,
     assignedOn: new Date().toISOString().split('T')[0],
     status: 'pending',
@@ -59,14 +75,57 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
     }
   })
 
+  const [projects, setProjects] = useState<Project[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(false)
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false)
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false)
+
+  // Fetch projects and users on modal open
+  useEffect(() => {
+    if (isOpen) {
+      fetchProjects()
+      fetchUsers()
+    }
+  }, [isOpen])
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, description, status')
+        .order('name', { ascending: true })
+      
+      if (error) throw error
+      setProjects(data || [])
+    } catch (error) {
+      console.error('Error fetching projects:', error)
+    }
+  }
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name, email, role, department')
+        .eq('status', 'active')
+        .order('name', { ascending: true })
+      
+      if (error) throw error
+      setUsers(data || [])
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (formData.title && formData.project && formData.deadline) {
+    if (formData.title && formData.project_id && formData.deadline) {
       onSubmit(formData)
       setFormData({
         title: '',
         description: '',
-        project: '',
+        project_id: '',
         estimatedHours: 0,
         assignedOn: new Date().toISOString().split('T')[0],
         status: 'pending',
@@ -88,6 +147,40 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
   const handleChange = (field: keyof Task, value: string | number | string[] | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
+
+  const selectProject = (project: Project) => {
+    setFormData(prev => ({ ...prev, project_id: project.id }))
+    setShowProjectDropdown(false)
+  }
+
+  const selectAssignee = (user: User) => {
+    setFormData(prev => ({ ...prev, assignee: user.id }))
+    setShowAssigneeDropdown(false)
+  }
+
+  const getProjectName = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId)
+    return project ? project.name : 'Select a project'
+  }
+
+  const getAssigneeName = (assigneeId: string) => {
+    const user = users.find(u => u.id === assigneeId)
+    return user ? user.name : 'Select assignee'
+  }
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element
+      if (!target.closest('.project-dropdown') && !target.closest('.assignee-dropdown')) {
+        setShowProjectDropdown(false)
+        setShowAssigneeDropdown(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   return (
     <AnimatePresence>
@@ -133,13 +226,44 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
 
                 <div className="space-y-2">
                   <Label htmlFor="project">Project *</Label>
-                  <Input
-                    id="project"
-                    value={formData.project}
-                    onChange={(e) => handleChange('project', e.target.value)}
-                    placeholder="Enter project name"
-                    required
-                  />
+                  <div className="relative project-dropdown">
+                    <button
+                      type="button"
+                      onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+                      className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md bg-background text-sm text-left hover:bg-accent transition-colors"
+                    >
+                      <span className={formData.project_id ? 'text-foreground' : 'text-muted-foreground'}>
+                        {getProjectName(formData.project_id)}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    
+                    {showProjectDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-background border border-input rounded-md shadow-lg max-h-60 overflow-auto">
+                        {projects.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            No projects available
+                          </div>
+                        ) : (
+                          projects.map((project) => (
+                            <button
+                              key={project.id}
+                              type="button"
+                              onClick={() => selectProject(project)}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                            >
+                              <div className="font-medium">{project.name}</div>
+                              {project.description && (
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {project.description}
+                                </div>
+                              )}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -158,12 +282,42 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="assignee">Assignee</Label>
-                  <Input
-                    id="assignee"
-                    value={formData.assignee}
-                    onChange={(e) => handleChange('assignee', e.target.value)}
-                    placeholder="Enter assignee name"
-                  />
+                  <div className="relative assignee-dropdown">
+                    <button
+                      type="button"
+                      onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
+                      className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md bg-background text-sm text-left hover:bg-accent transition-colors"
+                    >
+                      <span className={formData.assignee ? 'text-foreground' : 'text-muted-foreground'}>
+                        {getAssigneeName(formData.assignee)}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    
+                    {showAssigneeDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-background border border-input rounded-md shadow-lg max-h-60 overflow-auto">
+                        {users.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            No users available
+                          </div>
+                        ) : (
+                          users.map((user) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => selectAssignee(user)}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                            >
+                              <div className="font-medium">{user.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {user.department} • {user.role}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
