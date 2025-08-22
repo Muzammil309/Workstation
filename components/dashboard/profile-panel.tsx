@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { User, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Save, X, Camera, Shield, Key, Bell, Palette, Globe, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
@@ -29,6 +30,14 @@ interface ProfileData {
     taskUpdates?: boolean
     projectUpdates?: boolean
     language: string
+    notificationSounds?: {
+      default: string
+      urgent: string
+      alert: string
+    }
+    soundVolume?: number
+    soundsEnabled?: boolean
+    vibrateEnabled?: boolean
   }
   created_at: string
   updated_at: string
@@ -57,6 +66,35 @@ export function ProfilePanel() {
     isVerifying: false
   })
   const [is2FAEnabled, setIs2FAEnabled] = useState(false)
+
+  // Add previewSound function
+  const previewSound = (soundType: string) => {
+    try {
+      // Import and use the enhanced notification sound system
+      const { playNotificationSound } = require('@/lib/notifications')
+      
+      // Map sound types to notification sound types
+      let notificationType: 'default' | 'urgent' | 'alert' = 'default'
+      if (soundType === 'urgent') notificationType = 'urgent'
+      else if (soundType === 'alert') notificationType = 'alert'
+      
+      // Play the selected sound
+      playNotificationSound(notificationType)
+      
+      toast({
+        title: "Sound Preview",
+        description: `Playing ${soundType} sound`,
+        userPreferences: profile?.preferences
+      })
+    } catch (error) {
+      console.error('Error playing sound:', error)
+      toast({
+        title: "Error",
+        description: "Could not play sound preview",
+        variant: "destructive",
+      })
+    }
+  }
 
   useEffect(() => {
     if (user) {
@@ -88,7 +126,15 @@ export function ProfilePanel() {
           emailUpdates: false,
           taskUpdates: true,
           projectUpdates: true,
-          language: 'en'
+          language: 'en',
+          notificationSounds: {
+            default: 'default',
+            urgent: 'urgent',
+            alert: 'alert'
+          },
+          soundVolume: 50,
+          soundsEnabled: true,
+          vibrateEnabled: false
         }
       }
       
@@ -682,6 +728,166 @@ export function ProfilePanel() {
                 <label htmlFor="projectUpdates" className="text-sm font-medium">Project Updates</label>
               </div>
               <p className="text-xs text-muted-foreground">Receive project status updates and milestones</p>
+            </div>
+
+            {/* Notification Sound Preferences */}
+            <div className="space-y-4 pt-4 border-t">
+              <div>
+                <h4 className="text-lg font-semibold mb-3">Notification Sounds</h4>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Choose your preferred notification sound for different types of alerts
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Default Notifications */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Default Notifications</Label>
+                  <div className="space-y-2">
+                    {['default', 'urgent', 'alert'].map((soundType) => (
+                      <div key={soundType} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-3 h-3 rounded-full ${
+                            soundType === 'default' ? 'bg-blue-500' :
+                            soundType === 'urgent' ? 'bg-orange-500' :
+                            'bg-red-500'
+                          }`} />
+                          <div>
+                            <span className="text-sm font-medium capitalize">{soundType}</span>
+                            <p className="text-xs text-muted-foreground">
+                              {soundType === 'default' ? 'Standard notifications' :
+                               soundType === 'urgent' ? 'Important updates' :
+                               'Critical alerts'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <select
+                            data-sound-type={soundType}
+                            value={editedProfile.preferences?.notificationSounds?.[soundType as keyof typeof editedProfile.preferences.notificationSounds] || 'default'}
+                            onChange={(e) => handleInputChange('preferences', {
+                              ...editedProfile.preferences?.notificationSounds,
+                              [soundType]: e.target.value
+                            })}
+                            disabled={!isEditing}
+                            className="text-xs px-2 py-1 border rounded bg-background"
+                          >
+                            <option value="default">Default</option>
+                            <option value="bell">Bell</option>
+                            <option value="chime">Chime</option>
+                            <option value="ding">Ding</option>
+                            <option value="pop">Pop</option>
+                            <option value="swoosh">Swoosh</option>
+                            <option value="alert">Alert</option>
+                            <option value="urgent">Urgent</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const selectElement = document.querySelector(`select[data-sound-type="${soundType}"]`) as HTMLSelectElement
+                              const selectedValue = selectElement?.value || 'default'
+                              previewSound(selectedValue)
+                            }}
+                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Preview Sound"
+                            disabled={!isEditing}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Custom Sound Settings */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Sound Settings</Label>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Master Volume</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={editedProfile.preferences?.soundVolume || 50}
+                        onChange={(e) => handleInputChange('preferences', {
+                          ...editedProfile.preferences,
+                          soundVolume: parseInt(e.target.value)
+                        })}
+                        disabled={!isEditing}
+                        className="w-24"
+                      />
+                      <span className="text-xs text-muted-foreground w-8 text-right">
+                        {editedProfile.preferences?.soundVolume || 50}%
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Enable Sounds</span>
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('preferences', {
+                          ...editedProfile.preferences,
+                          soundsEnabled: !editedProfile.preferences?.soundsEnabled
+                        })}
+                        disabled={!isEditing}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          editedProfile.preferences?.soundsEnabled ? 'bg-blue-600' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          editedProfile.preferences?.soundsEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">Vibrate on Mobile</span>
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('preferences', {
+                          ...editedProfile.preferences,
+                          vibrateEnabled: !editedProfile.preferences?.vibrateEnabled
+                        })}
+                        disabled={!isEditing}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          editedProfile.preferences?.vibrateEnabled ? 'bg-green-600' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          editedProfile.preferences?.vibrateEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sound Preview Section */}
+              <div className="mt-6 p-4 bg-muted/30 rounded-lg">
+                <h5 className="text-sm font-medium mb-3">Sound Preview</h5>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {['default', 'bell', 'chime', 'ding', 'pop', 'swoosh', 'alert', 'urgent'].map((sound) => (
+                    <button
+                      key={sound}
+                      type="button"
+                      onClick={() => previewSound(sound)}
+                      disabled={!isEditing}
+                      className="flex flex-col items-center p-3 border rounded-lg hover:bg-background transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2 group-hover:bg-blue-200 dark:group-hover:bg-blue-800/30 transition-colors">
+                        <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs font-medium capitalize">{sound}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}

@@ -6,7 +6,7 @@ import type {
 } from "@/components/ui/toast"
 
 // Import notification sounds
-import { playNotificationSound } from "@/lib/notifications"
+import { playNotificationSound, playCustomNotificationSound } from "@/lib/notifications"
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000
@@ -16,6 +16,7 @@ type ToasterToast = ToastProps & {
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  userPreferences?: any
 }
 
 const actionTypes = {
@@ -140,18 +141,20 @@ function dispatch(action: Action) {
   })
 }
 
-type Toast = Omit<ToasterToast, "id">
+type Toast = Omit<ToasterToast, "id"> & {
+  userPreferences?: any
+}
 
-function toast({ variant = "default", ...props }: Toast) {
+function toast({ variant = "default", userPreferences, ...props }: Toast & { userPreferences?: any }) {
   const id = genId()
 
-  // Play notification sound based on toast variant
+  // Play notification sound based on toast variant and user preferences
   if (variant === "destructive") {
-    playNotificationSound("alert") // High-alert sound for errors
+    playCustomNotificationSound("alert", userPreferences) // High-alert sound for errors
   } else if (variant === "default") {
-    playNotificationSound("urgent") // Urgent sound for success/info
+    playCustomNotificationSound("urgent", userPreferences) // Urgent sound for success/info
   } else {
-    playNotificationSound("default") // Standard sound for other variants
+    playCustomNotificationSound("default", userPreferences) // Standard sound for other variants
   }
 
   const update = (props: ToasterToast) =>
@@ -168,6 +171,7 @@ function toast({ variant = "default", ...props }: Toast) {
       variant,
       id,
       open: true,
+      userPreferences,
       onOpenChange: (open) => {
         if (!open) dismiss()
       },
@@ -181,7 +185,7 @@ function toast({ variant = "default", ...props }: Toast) {
   }
 }
 
-function useToast() {
+function useToast(userPreferences?: any) {
   const [state, setState] = React.useState<State>(memoryState)
 
   React.useEffect(() => {
@@ -194,9 +198,14 @@ function useToast() {
     }
   }, [state])
 
+  // Create a toast function that includes user preferences
+  const toastWithPreferences = (props: Toast) => {
+    return toast({ ...props, userPreferences })
+  }
+
   return {
     ...state,
-    toast,
+    toast: toastWithPreferences,
     dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
   }
 }
