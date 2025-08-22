@@ -25,6 +25,8 @@ interface ProfileData {
     theme: 'light' | 'dark' | 'system'
     notifications: boolean
     emailUpdates?: boolean
+    taskUpdates?: boolean
+    projectUpdates?: boolean
     language: string
   }
   created_at: string
@@ -39,6 +41,13 @@ export function ProfilePanel() {
   const [isLoading, setIsLoading] = useState(true)
   const [editedProfile, setEditedProfile] = useState<Partial<ProfileData>>({})
   const [activeTab, setActiveTab] = useState('personal')
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  })
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -68,6 +77,8 @@ export function ProfilePanel() {
           theme: 'system',
           notifications: true,
           emailUpdates: false,
+          taskUpdates: true,
+          projectUpdates: true,
           language: 'en'
         }
       }
@@ -125,6 +136,73 @@ export function ProfilePanel() {
   const handleCancel = () => {
     setEditedProfile(profile || {})
     setIsEditing(false)
+  }
+
+  const handlePasswordChange = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "New passwords do not match",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "New password must be at least 6 characters long",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setIsChangingPassword(true)
+      
+      // First verify current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: profile?.email || '',
+        password: passwordData.currentPassword
+      })
+
+      if (signInError) {
+        toast({
+          title: "Error",
+          description: "Current password is incorrect",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Update password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwordData.newPassword
+      })
+
+      if (updateError) throw updateError
+
+      toast({
+        title: "Success",
+        description: "Password updated successfully",
+      })
+
+      // Reset form and close modal
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      })
+      setIsPasswordModalOpen(false)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to update password: " + error.message,
+        variant: "destructive"
+      })
+    } finally {
+      setIsChangingPassword(false)
+    }
   }
 
   const handleInputChange = (field: string, value: any) => {
@@ -470,6 +548,36 @@ export function ProfilePanel() {
                 <label htmlFor="emailUpdates" className="text-sm font-medium">Email Updates</label>
               </div>
               <p className="text-xs text-muted-foreground">Get important updates delivered to your email</p>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="taskUpdates"
+                  className="h-4 w-4 text-primary rounded"
+                  checked={editedProfile.preferences?.taskUpdates || false}
+                  onChange={(e) => handleInputChange('preferences', {
+                    taskUpdates: e.target.checked
+                  })}
+                  disabled={!isEditing}
+                />
+                <label htmlFor="taskUpdates" className="text-sm font-medium">Task Updates</label>
+              </div>
+              <p className="text-xs text-muted-foreground">Get notified about task changes and updates</p>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="projectUpdates"
+                  className="h-4 w-4 text-primary rounded"
+                  checked={editedProfile.preferences?.projectUpdates || false}
+                  onChange={(e) => handleInputChange('preferences', {
+                    projectUpdates: e.target.checked
+                  })}
+                  disabled={!isEditing}
+                />
+                <label htmlFor="projectUpdates" className="text-sm font-medium">Project Updates</label>
+              </div>
+              <p className="text-xs text-muted-foreground">Receive project status updates and milestones</p>
             </div>
           </motion.div>
         )}
@@ -485,7 +593,10 @@ export function ProfilePanel() {
               <p className="text-sm text-muted-foreground mb-4">
                 Change your password to keep your account secure
               </p>
-              <Button variant="outline">
+              <Button 
+                variant="outline"
+                onClick={() => setIsPasswordModalOpen(true)}
+              >
                 <Key className="w-4 h-4 mr-2" />
                 Change Password
               </Button>
@@ -534,8 +645,11 @@ export function ProfilePanel() {
                 </div>
                 <input
                   type="checkbox"
-                  checked={true}
-                  disabled
+                  checked={editedProfile.preferences?.taskUpdates || false}
+                  onChange={(e) => handleInputChange('preferences', {
+                    taskUpdates: e.target.checked
+                  })}
+                  disabled={!isEditing}
                   className="w-4 h-4 text-primary"
                 />
               </div>
@@ -547,8 +661,27 @@ export function ProfilePanel() {
                 </div>
                 <input
                   type="checkbox"
-                  checked={true}
-                  disabled
+                  checked={editedProfile.preferences?.projectUpdates || false}
+                  onChange={(e) => handleInputChange('preferences', {
+                    projectUpdates: e.target.checked
+                  })}
+                  disabled={!isEditing}
+                  className="w-4 h-4 text-primary"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium">Email Updates</h3>
+                  <p className="text-sm text-muted-foreground">Get important updates delivered to your email</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={editedProfile.preferences?.emailUpdates || false}
+                  onChange={(e) => handleInputChange('preferences', {
+                    emailUpdates: e.target.checked
+                  })}
+                  disabled={!isEditing}
                   className="w-4 h-4 text-primary"
                 />
               </div>
@@ -556,6 +689,96 @@ export function ProfilePanel() {
           </motion.div>
         )}
       </div>
+    </div>
+
+      {/* Password Change Modal */}
+      <AnimatePresence>
+        {isPasswordModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-background border rounded-lg p-6 w-full max-w-md"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold">Change Password</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsPasswordModalOpen(false)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Current Password</label>
+                  <Input
+                    type="password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                    placeholder="Enter current password"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">New Password</label>
+                  <Input
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                    placeholder="Enter new password"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">Confirm New Password</label>
+                  <Input
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                    placeholder="Confirm new password"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex space-x-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsPasswordModalOpen(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handlePasswordChange}
+                  disabled={isChangingPassword}
+                  className="flex-1"
+                >
+                  {isChangingPassword ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Key className="w-4 h-4 mr-2" />
+                      Update Password
+                    </>
+                  )}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
