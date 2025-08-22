@@ -25,6 +25,12 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { motion, AnimatePresence } from 'framer-motion'
+import { List, Grid3X3, Plus, Play, Pause, Check, Trash2, Edit, Eye } from 'lucide-react'
 
 export function TaskBoard() {
   const [tasks, setTasks] = useState<Task[]>([])

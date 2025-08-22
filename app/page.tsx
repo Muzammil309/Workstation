@@ -87,11 +87,11 @@ export default function HomePage() {
           >
             <div className="space-y-6">
               <h1 className="text-5xl lg:text-6xl font-bold leading-tight">
-                <span className="text-white">Transform Your</span>
+                <span className="text-gray-900 dark:text-white">Transform Your</span>
                 <br />
                 <span className="gradient-text">Organization</span>
               </h1>
-              <p className="text-xl text-gray-300 leading-relaxed">
+              <p className="text-xl text-gray-700 dark:text-gray-300 leading-relaxed">
                 Empowering organizations through strategic change management, digital transformation, 
                 and innovative business solutions. Drive sustainable growth and operational excellence.
               </p>
@@ -108,8 +108,8 @@ export default function HomePage() {
                   className="glass-card rounded-lg p-4 hover:neon-glow transition-all duration-300"
                 >
                   <feature.icon className="w-6 h-6 text-neon-blue mb-2" />
-                  <h3 className="font-semibold text-white text-sm">{feature.title}</h3>
-                  <p className="text-gray-400 text-xs">{feature.description}</p>
+                  <h3 className="font-semibold text-gray-900 dark:text-white text-sm">{feature.title}</h3>
+                  <p className="text-gray-600 dark:text-gray-400 text-xs">{feature.description}</p>
                 </motion.div>
               ))}
             </div>
@@ -173,10 +173,10 @@ export default function HomePage() {
             viewport={{ once: true }}
             className="space-y-6"
           >
-            <h2 className="text-3xl md:text-4xl font-bold text-white">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
               Ready to Transform Your Organization?
             </h2>
-            <p className="text-xl text-gray-300 max-w-2xl mx-auto">
+            <p className="text-xl text-gray-700 dark:text-gray-300 max-w-2xl mx-auto">
               Join leading organizations that have already experienced the Change Mechanics difference. 
               Let's discuss how we can help you achieve your transformation goals.
             </p>
