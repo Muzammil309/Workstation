@@ -1,28 +1,18 @@
 # 🔒 Secure Team Member Setup Guide
 
-## 🚨 **IMPORTANT: Passwords are NOT stored in code for security**
+## 🚨 **IMPORTANT: These are TEMPORARY passwords - change them after first login!**
 
-## 🔐 **Step 1: Generate Passwords Securely**
+## 🔐 **Step 1: Temporary Passwords (Change After First Login)**
 
-**DO NOT copy passwords into any code files!**
+**⚠️ WARNING: These are temporary passwords for initial setup only!**
 
-Use this secure method to generate passwords:
-
-1. **Go to:** [passwordsgenerator.net](https://passwordsgenerator.net/)
-2. **Set length:** 12 characters
-3. **Check all boxes:** Uppercase, Lowercase, Numbers, Symbols
-4. **Generate password** for each team member
-5. **Write down securely** (password manager recommended)
-
-## 👥 **Team Member List**
-
-| # | Name | Email | Department | Role |
-|---|------|-------|------------|------|
-| 1 | **Alina Atta** | alina.atta@changemechanics.pk | Development | user |
-| 2 | **Rameesha Nouman** | rameesha.nouman@changemechanics.pk | Design | user |
-| 3 | **Mehar Alam** | mehar.alam@changemechanics.pk | Marketing | user |
-| 4 | **Umayr Masud** | umayr.masud@changemechanics.pk | Development | user |
-| 5 | **Muzammil Ahmed** | muzammil.ahmed@changemechanics.pk | Development | user |
+| # | Name | Email | **Temporary Password** | Department | Role |
+|---|------|-------|------------------------|------------|------|
+| 1 | **Alina Atta** | alina.atta@changemechanics.pk | `alina123` | Development | user |
+| 2 | **Rameesha Nouman** | rameesha.nouman@changemechanics.pk | `rameesha123` | Design | user |
+| 3 | **Mehar Alam** | mehar.alam@changemechanics.pk | `mehar123` | Marketing | user |
+| 4 | **Umayr Masud** | umayr.masud@changemechanics.pk | `umayr123` | Development | user |
+| 5 | **Muzammil Ahmed** | muzammil.ahmed@changemechanics.pk | `muzammil123` | Development | user |
 
 ## 🚀 **Step 2: Create Users in Supabase Auth**
 
@@ -30,7 +20,7 @@ Use this secure method to generate passwords:
 2. **Select your project**
 3. **Click:** Authentication → Users
 4. **Click:** "Add User" for each team member
-5. **Enter:** Email and generated password
+5. **Enter:** Email and temporary password from the table above
 6. **Click:** "Create User" for each person
 7. **Copy the User ID** for each person
 
@@ -125,20 +115,29 @@ FROM public.users
 WHERE email LIKE '%changemechanics.pk%';
 ```
 
-## 🔐 **Step 6: Share Credentials Securely**
+## 🔐 **Step 6: Test Login & Change Passwords**
 
-- **Send each team member** their email and password via secure channel
-- **Ask them to change password** on first login
-- **Enable 2FA** for enhanced security
+1. **Test login** with temporary passwords
+2. **Immediately change passwords** after first login
+3. **Enable 2FA** for enhanced security
 
 ## 🚨 **Security Best Practices**
 
-- ✅ **Never commit passwords** to Git repositories
-- ✅ **Use password managers** to store credentials
-- ✅ **Share passwords securely** (not via email)
+- ✅ **Change temporary passwords** immediately after first login
+- ✅ **Use strong passwords** (12+ characters, mixed case, numbers, symbols)
+- ✅ **Never share passwords** via email or chat
 - ✅ **Enable 2FA** for all accounts
-- ✅ **Change passwords** on first login
+- ✅ **Use password managers** for secure storage
+
+## 🔄 **How to Change Passwords After Login**
+
+1. **Login** with temporary password
+2. **Go to:** Profile → Security → Change Password
+3. **Enter:** Current temporary password
+4. **Enter:** New strong password
+5. **Confirm:** New password
+6. **Save changes**
 
 ---
 
-**🎯 After following these steps, your team members will be able to login successfully!**
+**🎯 After following these steps, your team members will be able to login successfully with temporary passwords!**
