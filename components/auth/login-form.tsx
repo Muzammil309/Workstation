@@ -184,7 +184,7 @@ export function LoginForm() {
             autoComplete="off"
             className="w-4 h-4 text-neon-blue bg-transparent border-white/20 rounded focus:ring-neon-blue/20"
           />
-          <span className="text-sm text-gray-300">Remember me</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">Remember me</span>
         </label>
         <button
           type="button"

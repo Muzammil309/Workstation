@@ -36,6 +36,7 @@ export function TaskBoard() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [viewMode, setViewMode] = useState<'columns' | 'list'>('columns') // New state for view toggle
   const [activeTimers, setActiveTimers] = useState<Record<string, { 
     startTime: number; 
     elapsed: number; 
@@ -455,6 +456,25 @@ export function TaskBoard() {
             </p>
           </div>
           <div className="flex gap-2">
+            {/* View Toggle Button */}
+            <button
+              onClick={() => setViewMode(viewMode === 'columns' ? 'list' : 'columns')}
+              className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+              title={viewMode === 'columns' ? 'Switch to List View' : 'Switch to Column View'}
+            >
+              {viewMode === 'columns' ? (
+                <>
+                  <List className="w-4 h-4" />
+                  <span className="hidden sm:inline">List View</span>
+                </>
+              ) : (
+                <>
+                  <Grid3X3 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Column View</span>
+                </>
+              )}
+            </button>
+            
             <button
               onClick={loadTasks}
               disabled={isLoading}
@@ -542,12 +562,234 @@ export function TaskBoard() {
         }))}
       />
 
-      {/* Kanban Board - Three Columns */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
+      {/* Task Display - Toggle between Columns and List */}
+      {viewMode === 'list' ? (
+        // List View - Optimized for admin tracking
+        <div className="space-y-4">
+          <div className="bg-card border rounded-lg p-4">
+            <h3 className="text-lg font-semibold mb-4">Task List View</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {user?.role === 'admin' ? 'Admin view: Track all team member tasks in detail' : 'List view: All your tasks in one place'}
+            </p>
+            
+            {/* List View Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-3 font-medium">Task</th>
+                    <th className="text-left p-3 font-medium">Assignee</th>
+                    <th className="text-left p-3 font-medium">Status</th>
+                    <th className="text-left p-3 font-medium">Priority</th>
+                    <th className="text-left p-3 font-medium">Progress</th>
+                    <th className="text-left p-3 font-medium">Deadline</th>
+                    <th className="text-left p-3 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.map((task) => (
+                    <tr key={task.id} className="border-b hover:bg-muted/30 transition-colors">
+                      <td className="p-3">
+                        <div>
+                          <div className="font-medium text-foreground">{task.title}</div>
+                          {task.description && (
+                            <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                              {task.description}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {task.assignee ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                              {task.assignee}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">Unassigned</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          task.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                          task.status === 'in-progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                          'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                        }`}>
+                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          task.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                          task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                          'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        }`}>
+                          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-16 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                            <div 
+                              className="bg-neon-blue h-2 rounded-full transition-all duration-300" 
+                              style={{ width: `${task.progress}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8">{task.progress}%</span>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {task.deadline ? (
+                            <span className={`${
+                              new Date(task.deadline) < new Date() && task.status !== 'completed'
+                                ? 'text-red-600 dark:text-red-400'
+                                : 'text-muted-foreground'
+                            }`}>
+                              {new Date(task.deadline).toLocaleDateString()}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">No deadline</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center space-x-1">
+                          {/* View Button */}
+                          <button
+                            onClick={() => {
+                              // You can implement a detailed view modal here
+                              toast({
+                                title: 'Task Details',
+                                description: `Viewing details for: ${task.title}`,
+                              })
+                            }}
+                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          
+                          {/* Edit Button */}
+                          <button
+                            onClick={() => {
+                              // You can implement an edit modal here
+                              toast({
+                                title: 'Edit Task',
+                                description: `Editing: ${task.title}`,
+                              })
+                            }}
+                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Edit Task"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          
+                          {/* Timer Controls */}
+                          {task.status === 'in-progress' && activeTimers[task.id] && (
+                            <>
+                              {activeTimers[task.id].isPaused ? (
+                                <button
+                                  onClick={() => resumeTimer(task.id)}
+                                  className="p-1 text-green-600 hover:text-green-700 transition-colors"
+                                  title="Resume Timer"
+                                >
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                                  </svg>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => pauseTimer(task.id)}
+                                  className="p-1 text-yellow-600 hover:text-yellow-700 transition-colors"
+                                  title="Pause Timer"
+                                >
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+                                  </svg>
+                                </button>
+                              )}
+                              
+                              <button
+                                onClick={() => stopTimer(task.id)}
+                                className="p-1 text-red-600 hover:text-red-700 transition-colors"
+                                title="Stop Timer"
+                              >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                            </>
+                          )}
+                          
+                          {/* Start Timer Button */}
+                          {task.status === 'pending' && !activeTimers[task.id] && (
+                            <button
+                              onClick={() => startTimer(task.id)}
+                              className="p-1 text-blue-600 hover:text-blue-700 transition-colors"
+                              title="Start Timer"
+                            >
+                              <Play className="w-4 h-4" />
+                            </button>
+                          )}
+                          
+                          {/* Complete Button */}
+                          {task.status !== 'completed' && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const timer = activeTimers[task.id]
+                                  if (timer) {
+                                    stopTimer(task.id)
+                                  }
+                                  await handleUpdateTask(task.id, { 
+                                    status: 'completed',
+                                    progress: 100
+                                  })
+                                } catch (error) {
+                                  toast({
+                                    title: 'Error',
+                                    description: 'Failed to complete task. Please try again.',
+                                    variant: 'destructive',
+                                  })
+                                }
+                              }}
+                              className="p-1 text-green-600 hover:text-green-700 transition-colors"
+                              title="Complete Task"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          )}
+                          
+                          {/* Delete Button */}
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
+                                await handleDeleteTask(task.id)
+                              }
+                            }}
+                            className="p-1 text-red-600 hover:text-red-700 transition-colors"
+                            title="Delete Task"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        // Column View - Original Kanban Board
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Pending Column */}
           <DroppableColumn 
@@ -658,6 +900,7 @@ export function TaskBoard() {
           </DroppableColumn>
         </div>
       </DndContext>
+      )}
     </div>
   )
 }
