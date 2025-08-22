@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { supabase } from '@/lib/supabase'
+import { Trash2, Edit, Save, X, UserPlus, Shield, User } from 'lucide-react'
 
 interface User {
   id: string
@@ -42,6 +43,7 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [showAddUser, setShowAddUser] = useState(false)
+  const [creatingUser, setCreatingUser] = useState(false)
   const [newUser, setNewUser] = useState<NewUser>({
     name: '',
     email: '',
@@ -176,46 +178,117 @@ export default function AdminPanel() {
     }
   }
 
-  const addNewUser = async () => {
+  const deleteUser = async (userId: string, userEmail: string) => {
+    // Prevent deletion of main admin
+    if (userEmail === 'admin@changemechanics.pk') {
+      toast({
+        title: "Error",
+        description: "Cannot delete the main admin user",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!confirm(`Are you sure you want to delete ${userEmail}? This action cannot be undone.`)) {
+      return
+    }
+
     try {
-      // First create user in auth.users
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: newUser.email,
-        password: newUser.password,
-        email_confirm: true
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId)
+
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: "User deleted successfully",
       })
 
-      if (authError) throw authError
+      // Update local state
+      setUsers(users.filter(u => u.id !== userId))
+    } catch (error) {
+      console.error('Error deleting user:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete user",
+        variant: "destructive"
+      })
+    }
+  }
 
-      // Then create profile in public.users
-      const { error: profileError } = await supabase
+  const addNewUser = async () => {
+    try {
+      setCreatingUser(true)
+      
+      // Validate required fields
+      if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password.trim()) {
+        toast({
+          title: "Validation Error",
+          description: "Name, email, and password are required",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Check if user already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', newUser.email)
+        .single()
+
+      if (existingUser) {
+        toast({
+          title: "Error",
+          description: "User with this email already exists",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Create user directly in the database
+      const { data, error } = await supabase
         .from('users')
         .insert({
-          id: authData.user.id,
-          name: newUser.name,
-          email: newUser.email,
+          name: newUser.name.trim(),
+          email: newUser.email.trim().toLowerCase(),
           role: newUser.role,
           department: newUser.department,
           status: 'active',
-          phone: newUser.phone,
-          location: newUser.location,
-          bio: newUser.bio,
-          skills: newUser.skills,
+          phone: newUser.phone.trim() || null,
+          location: newUser.location.trim() || null,
+          bio: newUser.bio.trim() || null,
+          skills: newUser.skills.length > 0 ? newUser.skills : [],
           preferences: {
             theme: 'system',
             notifications: true,
             emailUpdates: false,
             taskUpdates: true,
             projectUpdates: true,
-            language: 'en'
+            language: 'en',
+            notificationSounds: {
+              default: 'default',
+              urgent: 'urgent',
+              alert: 'alert'
+            },
+            soundVolume: 50,
+            soundsEnabled: true,
+            vibrateEnabled: false
           }
         })
+        .select()
+        .single()
 
-      if (profileError) throw profileError
+      if (error) {
+        console.error('Database error:', error)
+        throw new Error(`Database error: ${error.message}`)
+      }
 
       toast({
         title: "Success",
-        description: "New user created successfully",
+        description: `New ${newUser.role} user "${newUser.name}" created successfully!`,
       })
 
       // Reset form and refresh users
@@ -231,14 +304,16 @@ export default function AdminPanel() {
         skills: []
       })
       setShowAddUser(false)
-      fetchUsers()
-    } catch (error) {
+      await fetchUsers()
+    } catch (error: any) {
       console.error('Error creating new user:', error)
       toast({
         title: "Error",
-        description: "Failed to create new user",
+        description: error.message || "Failed to create new user. Please check the console for details.",
         variant: "destructive"
       })
+    } finally {
+      setCreatingUser(false)
     }
   }
 
@@ -287,8 +362,17 @@ export default function AdminPanel() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Admin Panel - User Management</h1>
-        <Button onClick={() => setShowAddUser(true)} className="bg-blue-600 hover:bg-blue-700">
+        <div>
+          <h1 className="text-2xl font-bold">Admin Panel - User Management</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Manage users, roles, and permissions. You have complete control over user accounts.
+          </p>
+        </div>
+        <Button 
+          onClick={() => setShowAddUser(true)} 
+          className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
+        >
+          <UserPlus className="w-4 h-4" />
           + Add New User
         </Button>
       </div>
@@ -297,43 +381,55 @@ export default function AdminPanel() {
       {showAddUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">Add New User</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Add New User</h2>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowAddUser(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Full Name *</Label>
                 <Input
                   id="name"
                   value={newUser.name}
                   onChange={(e) => setNewUser({...newUser, name: e.target.value})}
                   placeholder="Enter full name"
+                  required
                 />
               </div>
               
               <div>
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
                   type="email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({...newUser, email: e.target.value})}
                   placeholder="Enter email address"
+                  required
                 />
               </div>
               
               <div>
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Password *</Label>
                 <Input
                   id="password"
                   type="password"
                   value={newUser.password}
                   onChange={(e) => setNewUser({...newUser, password: e.target.value})}
                   placeholder="Enter password"
+                  required
                 />
               </div>
               
               <div>
-                <Label htmlFor="role">Role</Label>
+                <Label htmlFor="role">Role *</Label>
                 <select
                   id="role"
                   value={newUser.role}
@@ -346,7 +442,7 @@ export default function AdminPanel() {
               </div>
               
               <div>
-                <Label htmlFor="department">Department</Label>
+                <Label htmlFor="department">Department *</Label>
                 <select
                   id="department"
                   value={newUser.department}
@@ -424,12 +520,27 @@ export default function AdminPanel() {
             </div>
             
             <div className="flex gap-2 mt-6">
-              <Button onClick={addNewUser} className="bg-blue-600 hover:bg-blue-700">
-                Create User
+              <Button 
+                onClick={addNewUser} 
+                className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
+                disabled={creatingUser}
+              >
+                {creatingUser ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    Create User
+                  </>
+                )}
               </Button>
               <Button 
                 onClick={() => setShowAddUser(false)} 
                 variant="outline"
+                disabled={creatingUser}
               >
                 Cancel
               </Button>
@@ -467,13 +578,16 @@ export default function AdminPanel() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-semibold ${
+                          user.role === 'admin' ? 'bg-purple-500' : 'bg-blue-500'
+                        }`}>
                           {user.name.charAt(0).toUpperCase()}
                         </div>
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
                           {user.name}
+                          {user.role === 'admin' && <Shield className="w-4 h-4 text-purple-500" />}
                         </div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">
                           {user.email}
@@ -529,24 +643,36 @@ export default function AdminPanel() {
                             size="sm"
                             className="bg-green-600 hover:bg-green-700"
                           >
-                            Save
+                            <Save className="w-4 h-4" />
                           </Button>
                           <Button
                             onClick={() => setEditingUser(null)}
                             size="sm"
                             variant="outline"
                           >
-                            Cancel
+                            <X className="w-4 h-4" />
                           </Button>
                         </>
                       ) : (
-                        <Button
-                          onClick={() => setEditingUser(user)}
-                          size="sm"
-                          variant="outline"
-                        >
-                          Edit
-                        </Button>
+                        <>
+                          <Button
+                            onClick={() => setEditingUser(user)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          {user.email !== 'admin@changemechanics.pk' && (
+                            <Button
+                              onClick={() => deleteUser(user.id, user.email)}
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -561,7 +687,16 @@ export default function AdminPanel() {
       {editingUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">Edit User Profile: {editingUser.name}</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Edit User Profile: {editingUser.name}</h2>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setEditingUser(null)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -617,6 +752,7 @@ export default function AdminPanel() {
             
             <div className="flex gap-2 mt-6">
               <Button onClick={() => saveUserProfile(editingUser)} className="bg-blue-600 hover:bg-blue-700">
+                <Save className="w-4 h-4 mr-2" />
                 Save Changes
               </Button>
               <Button 
