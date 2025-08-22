@@ -91,7 +91,7 @@ export default function HomePage() {
                 <br />
                 <span className="gradient-text">Organization</span>
               </h1>
-              <p className="text-xl text-gray-700 dark:text-gray-300 leading-relaxed">
+              <p className="text-xl text-white leading-relaxed">
                 Empowering organizations through strategic change management, digital transformation, 
                 and innovative business solutions. Drive sustainable growth and operational excellence.
               </p>

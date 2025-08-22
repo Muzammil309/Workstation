@@ -12,7 +12,7 @@ import { ProjectsPanel } from '@/components/dashboard/projects-panel'
 import { CalendarView } from '@/components/dashboard/calendar-view'
 import { TeamManagement } from '@/components/dashboard/team-management'
 import { ReportsPanel } from '@/components/dashboard/reports-panel'
-import { TemplatesPanel } from '@/components/dashboard/templates-panel'
+
 import { IntegrationsPanel } from '@/components/dashboard/integrations-panel'
 import { ProfilePanel } from '@/components/dashboard/profile-panel'
 import { useAuth } from '@/hooks/use-auth'
@@ -95,8 +95,7 @@ export default function DashboardPage() {
         return <ReportsPanel />
       case 'profile':
         return <ProfilePanel />
-      case 'templates':
-        return <TemplatesPanel />
+
       case 'integrations':
         return <IntegrationsPanel />
       case 'admin':

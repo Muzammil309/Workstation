@@ -138,10 +138,10 @@ export function TeamManagement() {
           .insert({
             id: authData.user.id,
             email: newMember.email,
-            name: newMember.name,
-            role: newMember.role,
+      name: newMember.name,
+      role: newMember.role,
             department: finalDepartment,
-            status: newMember.status,
+      status: newMember.status,
             skills: newMember.skills,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -220,9 +220,9 @@ export function TeamManagement() {
         .eq('id', memberId)
 
       if (error) throw error
-
-      toast({
-        title: "Success",
+    
+    toast({
+      title: "Success",
         description: `${memberName} has been removed from the team`,
       })
 
@@ -288,7 +288,7 @@ export function TeamManagement() {
               <Users className="w-5 h-5 text-neon-blue" />
             </div>
           </div>
-        </div>
+          </div>
         
         <div className="glass-card-light dark:glass-card p-4 rounded-lg">
           <div className="flex items-center justify-between">
@@ -300,7 +300,7 @@ export function TeamManagement() {
               <UserCheck className="w-5 h-5 text-green-500" />
             </div>
           </div>
-        </div>
+          </div>
         
         <div className="glass-card-light dark:glass-card p-4 rounded-lg">
           <div className="flex items-center justify-between">
@@ -312,7 +312,7 @@ export function TeamManagement() {
               <Users className="w-5 h-5 text-purple-500" />
             </div>
           </div>
-        </div>
+          </div>
         
         <div className="glass-card-light dark:glass-card p-4 rounded-lg">
           <div className="flex items-center justify-between">
@@ -324,7 +324,7 @@ export function TeamManagement() {
               <MapPin className="w-5 h-5 text-blue-500" />
             </div>
           </div>
-        </div>
+          </div>
       </div>
 
       {/* Filters */}
@@ -363,7 +363,7 @@ export function TeamManagement() {
             <div className="text-center mb-4">
               <div className="w-20 h-20 bg-gradient-to-r from-neon-blue to-purple-500 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3">
                 {member.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-              </div>
+                </div>
               <h3 className="font-semibold text-xl mb-1">{member.name}</h3>
               <p className="text-muted-foreground text-sm mb-2">{member.email}</p>
             </div>
@@ -378,9 +378,9 @@ export function TeamManagement() {
                     : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                 }`}>
                   {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                </span>
-              </div>
-              
+              </span>
+            </div>
+
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Department:</span>
                 <span className="text-sm font-medium">{member.department}</span>
@@ -395,12 +395,12 @@ export function TeamManagement() {
                 }`}>
                   {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
                 </span>
-              </div>
+            </div>
 
               {/* Skills Section */}
               <div className="mt-3">
                 <span className="text-sm text-muted-foreground block mb-2">Skills:</span>
-                <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1">
                   {(member.skills || []).length > 0 ? (
                     (member.skills || []).map((skill, index) => {
                       const skillColors = [
@@ -419,14 +419,14 @@ export function TeamManagement() {
                           key={index}
                           className={`px-2 py-1 text-xs rounded-full ${skillColors[colorIndex]}`}
                         >
-                          {skill}
-                        </span>
+                    {skill}
+                  </span>
                       )
                     })
                   ) : (
                     <span className="text-xs text-muted-foreground italic">No skills listed</span>
-                  )}
-                </div>
+                )}
+              </div>
               </div>
             </div>
 
@@ -450,7 +450,7 @@ export function TeamManagement() {
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Remove
-                </Button>
+              </Button>
               )}
             </div>
           </motion.div>
@@ -482,7 +482,7 @@ export function TeamManagement() {
                   <X className="w-4 h-4" />
                 </Button>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Name *</label>
@@ -492,7 +492,7 @@ export function TeamManagement() {
                     placeholder="Full name"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Email *</label>
                   <Input
@@ -502,7 +502,7 @@ export function TeamManagement() {
                     placeholder="email@company.com"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Role *</label>
                   <select
@@ -514,7 +514,7 @@ export function TeamManagement() {
                     <option value="admin">Admin</option>
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Department *</label>
                   <select
@@ -529,11 +529,11 @@ export function TeamManagement() {
                     <option value="custom">Custom</option>
                   </select>
                 </div>
-                
+
                 {newMember.department === 'custom' && (
                   <div>
                     <label className="block text-sm font-medium mb-2">Custom Department *</label>
-                    <Input
+                  <Input
                       value={newMember.customDepartment}
                       onChange={(e) => setNewMember({ ...newMember, customDepartment: e.target.value })}
                       placeholder="Enter department name"
@@ -610,8 +610,8 @@ export function TeamManagement() {
                 >
                   <X className="w-4 h-4" />
                 </Button>
-              </div>
-              
+                </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Name *</label>
@@ -621,7 +621,7 @@ export function TeamManagement() {
                     placeholder="Full name"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Email</label>
                   <Input
@@ -657,7 +657,7 @@ export function TeamManagement() {
                     ))}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Status</label>
                   <select
@@ -684,7 +684,7 @@ export function TeamManagement() {
                   <p className="text-xs text-muted-foreground mt-1">Separate skills with commas</p>
                 </div>
               </div>
-              
+
               <div className="flex space-x-3 mt-6">
                 <Button
                   variant="outline"

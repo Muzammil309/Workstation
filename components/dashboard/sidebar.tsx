@@ -60,12 +60,7 @@ const navigationItems = [
     icon: User,
     description: 'Manage your profile'
   },
-  {
-    id: 'templates',
-    label: 'Templates',
-    icon: Copy,
-    description: 'Task and project templates'
-  },
+
   {
     id: 'integrations',
     label: 'Integrations',
