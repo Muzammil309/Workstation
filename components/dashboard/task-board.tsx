@@ -2,10 +2,30 @@
 
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/use-auth'
-import { TasksService, Task, CreateTaskData } from '@/lib/tasks-service'
+import { TasksService, CreateTaskData } from '@/lib/tasks-service'
+
+// Define our own Task interface to match the database schema
+interface Task {
+  id: string
+  title: string
+  description: string
+  project_id: string
+  status: 'pending' | 'in-progress' | 'completed'
+  priority: 'low' | 'medium' | 'high'
+  progress: number
+  estimated_hours: number
+  deadline: string
+  assignees: string[]
+  tags: string[]
+  dependencies: string[]
+  created_by: string
+  created_at: string
+  updated_at: string
+}
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
 import { CreateTaskModal } from './create-task-modal'
+import { TaskPreviewModal } from './task-preview-modal'
 import {
   DndContext,
   closestCenter,
@@ -36,6 +56,8 @@ export function TaskBoard() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [viewMode, setViewMode] = useState<'columns' | 'list'>('columns') // New state for view toggle
   const [activeTimers, setActiveTimers] = useState<Record<string, { 
     startTime: number; 
@@ -156,7 +178,7 @@ export function TaskBoard() {
           progress: taskData.progress || 0,
           estimated_hours: taskData.estimatedHours || 0,
           deadline: taskData.deadline || null,
-          assignee: taskData.assignee || '',
+          assignees: taskData.assignees || [],
           tags: taskData.tags || [],
           dependencies: taskData.dependencies || [],
           created_by: user.id,
@@ -555,17 +577,28 @@ export function TaskBoard() {
         </div>
       </div>
 
-      {/* Create Task Modal */}
-      <CreateTaskModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSubmit={handleCreateTask}
-        existingTasks={tasks.map(task => ({
-          id: task.id,
-          title: task.title,
-          status: task.status
-        }))}
-      />
+             {/* Create Task Modal */}
+       <CreateTaskModal
+         isOpen={showCreateModal}
+         onClose={() => setShowCreateModal(false)}
+         onSubmit={handleCreateTask}
+         existingTasks={tasks.map(task => ({
+           id: task.id,
+           title: task.title,
+           status: task.status
+         }))}
+       />
+
+       {/* Task Preview Modal */}
+       <TaskPreviewModal
+         isOpen={showPreviewModal}
+         onClose={() => {
+           setShowPreviewModal(false)
+           setSelectedTask(null)
+         }}
+         task={selectedTask}
+         onTaskUpdate={handleUpdateTask}
+       />
 
       {/* Task Display - Toggle between Columns and List */}
       {viewMode === 'list' ? (
@@ -604,17 +637,17 @@ export function TaskBoard() {
                           )}
                         </div>
                       </td>
-                      <td className="p-3">
-                        <div className="text-sm">
-                          {task.assignee ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                              {task.assignee}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">Unassigned</span>
-                          )}
-                        </div>
-                      </td>
+                                             <td className="p-3">
+                         <div className="text-sm">
+                           {task.assignees && task.assignees.length > 0 ? (
+                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                               {task.assignees.length} member{task.assignees.length > 1 ? 's' : ''}
+                             </span>
+                           ) : (
+                             <span className="text-muted-foreground">Unassigned</span>
+                           )}
+                         </div>
+                       </td>
                       <td className="p-3">
                         <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                           task.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
@@ -661,35 +694,29 @@ export function TaskBoard() {
                       </td>
                       <td className="p-3">
                         <div className="flex items-center space-x-1">
-                          {/* View Button */}
-                          <button
-                            onClick={() => {
-                              // You can implement a detailed view modal here
-                              toast({
-                                title: 'Task Details',
-                                description: `Viewing details for: ${task.title}`,
-                              })
-                            }}
-                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                            title="View Details"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          
-                          {/* Edit Button */}
-                          <button
-                            onClick={() => {
-                              // You can implement an edit modal here
-                              toast({
-                                title: 'Edit Task',
-                                description: `Editing: ${task.title}`,
-                              })
-                            }}
-                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                            title="Edit Task"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
+                                                     {/* View Button */}
+                           <button
+                             onClick={() => {
+                               setSelectedTask(task)
+                               setShowPreviewModal(true)
+                             }}
+                             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                             title="View Details"
+                           >
+                             <Eye className="w-4 h-4" />
+                           </button>
+                           
+                           {/* Edit Button */}
+                           <button
+                             onClick={() => {
+                               setSelectedTask(task)
+                               setShowPreviewModal(true)
+                             }}
+                             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                             title="Edit Task"
+                           >
+                             <Edit className="w-4 h-4" />
+                           </button>
                           
                           {/* Timer Controls */}
                           {task.status === 'in-progress' && activeTimers[task.id] && (
@@ -1023,18 +1050,18 @@ function SortableTaskCard({
         if (error) throw error
         setUsers(data || [])
         
-        // Find assigned user
-        if (task.assignee_id) {
-          const assigned = data?.find(u => u.id === task.assignee_id)
-          setAssignedUser(assigned)
-        }
+                 // Find assigned users
+         if (task.assignees && task.assignees.length > 0) {
+           const assigned = data?.find(u => u.id === task.assignees[0]) // Show first assignee for now
+           setAssignedUser(assigned)
+         }
       } catch (error) {
         console.error('Error fetching users:', error)
       }
     }
     
-    fetchUsers()
-  }, [task.assignee_id])
+         fetchUsers()
+   }, [task.assignees])
 
   // Calculate time remaining until deadline
   const getTimeRemaining = () => {
@@ -1113,15 +1140,17 @@ function SortableTaskCard({
         
         {/* Task Details Section */}
         <div className="space-y-3">
-          {/* Assigned User */}
-          {task.assignee && (
-            <div className="flex items-center space-x-2 text-sm">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
-                {task.assignee.charAt(0).toUpperCase()}
-              </div>
-              <span className="text-gray-600 dark:text-gray-300 font-medium">{task.assignee}</span>
-            </div>
-          )}
+                     {/* Assigned Users */}
+           {task.assignees && task.assignees.length > 0 && (
+             <div className="flex items-center space-x-2 text-sm">
+               <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
+                 {task.assignees.length > 1 ? 'M' : task.assignees[0].charAt(0).toUpperCase()}
+               </div>
+               <span className="text-gray-600 dark:text-gray-300 font-medium">
+                 {task.assignees.length > 1 ? `${task.assignees.length} members` : task.assignees[0]}
+               </span>
+             </div>
+           )}
           
           {/* Time Estimation and Actual Time */}
           <div className="flex items-center justify-between text-sm">
@@ -1133,14 +1162,7 @@ function SortableTaskCard({
                 <span>Est: {task.estimated_hours}h</span>
               </div>
             )}
-            {task.actual_time && (
-              <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                </svg>
-                <span>Actual: {task.actual_time}</span>
-              </div>
-            )}
+                         {/* Actual time would be calculated from timer data */}
           </div>
           
           {/* Deadline and Time Remaining */}
@@ -1386,16 +1408,12 @@ function SortableTaskCard({
                    try {
                      console.log(`✅ Completing task: ${task.id}`)
                      
-                     // Stop the timer and calculate actual time
-                     const timer = activeTimers[task.id]
-                     let actualTime = task.actual_time || '0h'
-                     
-                     if (timer) {
-                       const totalMs = timer.elapsed + (Date.now() - timer.startTime)
-                       const hours = Math.round((totalMs / (1000 * 60 * 60)) * 10) / 10
-                       actualTime = `${hours}h`
-                       onStopTimer(task.id)
-                     }
+                                           // Stop the timer
+                      const timer = activeTimers[task.id]
+                      
+                      if (timer) {
+                        onStopTimer(task.id)
+                      }
                      
                      // Update task status to completed with actual time and 100% progress
                      await onUpdate(task.id, { 
@@ -1456,22 +1474,24 @@ function SortableTaskCard({
              )}
           </div>
           
-          {/* Delete Button - Available to all users */}
-          <button
-            onClick={async (e) => {
-              e.stopPropagation()
-              if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
-                await onDelete(task.id)
-              }
-            }}
-            className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs font-medium rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
-          >
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <span>Delete</span>
-          </button>
+          {/* Delete Button - Admin only */}
+          {user?.role === 'admin' && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation()
+                if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
+                  await onDelete(task.id)
+                }
+              }}
+              className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs font-medium rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+            >
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" clipRule="evenodd" />
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <span>Delete</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

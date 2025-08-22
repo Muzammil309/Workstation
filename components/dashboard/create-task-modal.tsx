@@ -40,7 +40,7 @@ interface Task {
   status: 'pending' | 'in-progress' | 'completed'
   deadline: string
   notes: string
-  assignee: string
+  assignees: string[]
   priority: 'low' | 'medium' | 'high'
   dependencies?: string[]
   tags?: string[]
@@ -64,7 +64,7 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
     status: 'pending',
     deadline: '',
     notes: '',
-    assignee: '',
+    assignees: [],
     priority: 'medium',
     progress: 0,
     tags: [],
@@ -131,7 +131,7 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
         status: 'pending',
         deadline: '',
         notes: '',
-        assignee: '',
+        assignees: [],
         priority: 'medium',
         progress: 0,
         tags: [],
@@ -154,8 +154,23 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
   }
 
   const selectAssignee = (user: User) => {
-    setFormData(prev => ({ ...prev, assignee: user.id }))
-    setShowAssigneeDropdown(false)
+    setFormData(prev => {
+      const isAlreadySelected = prev.assignees.includes(user.id)
+      if (isAlreadySelected) {
+        // Remove if already selected
+        return { ...prev, assignees: prev.assignees.filter(id => id !== user.id) }
+      } else {
+        // Add if not selected
+        return { ...prev, assignees: [...prev.assignees, user.id] }
+      }
+    })
+  }
+
+  const removeAssignee = (userId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      assignees: prev.assignees.filter(id => id !== userId)
+    }))
   }
 
   const getProjectName = (projectId: string) => {
@@ -163,9 +178,13 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
     return project ? project.name : 'Select a project'
   }
 
-  const getAssigneeName = (assigneeId: string) => {
-    const user = users.find(u => u.id === assigneeId)
-    return user ? user.name : 'Select assignee'
+  const getAssigneeNames = (assigneeIds: string[]) => {
+    if (assigneeIds.length === 0) return 'Select assignees'
+    if (assigneeIds.length === 1) {
+      const user = users.find(u => u.id === assigneeIds[0])
+      return user ? user.name : 'Unknown user'
+    }
+    return `${assigneeIds.length} members selected`
   }
 
   // Close dropdowns when clicking outside
@@ -280,45 +299,85 @@ export function CreateTaskModal({ isOpen, onClose, onSubmit, existingTasks = [] 
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="assignee">Assignee</Label>
-                  <div className="relative assignee-dropdown">
-                    <button
-                      type="button"
-                      onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
-                      className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md bg-background text-sm text-left hover:bg-accent transition-colors"
-                    >
-                      <span className={formData.assignee ? 'text-foreground' : 'text-muted-foreground'}>
-                        {getAssigneeName(formData.assignee)}
-                      </span>
-                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    
-                    {showAssigneeDropdown && (
-                      <div className="absolute z-10 w-full mt-1 bg-background border border-input rounded-md shadow-lg max-h-60 overflow-auto">
-                        {users.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">
-                            No users available
-                          </div>
-                        ) : (
-                          users.map((user) => (
-                            <button
-                              key={user.id}
-                              type="button"
-                              onClick={() => selectAssignee(user)}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
-                            >
-                              <div className="font-medium">{user.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {user.department} • {user.role}
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                                 <div className="space-y-2">
+                   <Label htmlFor="assignees">Assignees</Label>
+                   <div className="relative assignee-dropdown">
+                     <button
+                       type="button"
+                       onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
+                       className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md bg-background text-sm text-left hover:bg-accent transition-colors"
+                     >
+                       <span className={formData.assignees.length > 0 ? 'text-foreground' : 'text-muted-foreground'}>
+                         {getAssigneeNames(formData.assignees)}
+                       </span>
+                       <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                     </button>
+                     
+                     {/* Selected Assignees Display */}
+                     {formData.assignees.length > 0 && (
+                       <div className="mt-2 flex flex-wrap gap-2">
+                         {formData.assignees.map((assigneeId) => {
+                           const user = users.find(u => u.id === assigneeId)
+                           return user ? (
+                             <span
+                               key={assigneeId}
+                               className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs rounded-full border border-blue-300 dark:border-blue-700"
+                             >
+                               {user.name}
+                               <button
+                                 type="button"
+                                 onClick={() => removeAssignee(assigneeId)}
+                                 className="ml-1 hover:text-blue-600 dark:hover:text-blue-300"
+                               >
+                                 ×
+                               </button>
+                             </span>
+                           ) : null
+                         })}
+                       </div>
+                     )}
+                     
+                     {showAssigneeDropdown && (
+                       <div className="absolute z-10 w-full mt-1 bg-background border border-input rounded-md shadow-lg max-h-60 overflow-auto">
+                         {users.length === 0 ? (
+                           <div className="px-3 py-2 text-sm text-muted-foreground">
+                             No users available
+                           </div>
+                         ) : (
+                           users.map((user) => {
+                             const isSelected = formData.assignees.includes(user.id)
+                             return (
+                               <button
+                                 key={user.id}
+                                 type="button"
+                                 onClick={() => selectAssignee(user)}
+                                 className={`w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors ${
+                                   isSelected ? 'bg-blue-100 dark:bg-blue-900/30' : ''
+                                 }`}
+                               >
+                                 <div className="flex items-center justify-between">
+                                   <div>
+                                     <div className="font-medium">{user.name}</div>
+                                     <div className="text-xs text-muted-foreground">
+                                       {user.department} • {user.role}
+                                     </div>
+                                   </div>
+                                   {isSelected && (
+                                     <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                                       <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                       </svg>
+                                     </div>
+                                   )}
+                                 </div>
+                               </button>
+                             )
+                           })
+                         )}
+                       </div>
+                     )}
+                   </div>
+                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="estimatedHours">Estimated Hours</Label>
