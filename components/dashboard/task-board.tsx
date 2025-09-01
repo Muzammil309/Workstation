@@ -52,10 +52,10 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { motion, AnimatePresence } from 'framer-motion'
-import { List, Grid3X3, Plus, Play, Pause, Check, Trash2, Edit, Eye } from 'lucide-react'
+import { List, Grid3X3, Plus, Play, Pause, Check, Trash2, Edit, Eye, X } from 'lucide-react'
 
 export function TaskBoard() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -63,6 +63,9 @@ export function TaskBoard() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editFormData, setEditFormData] = useState<Partial<Task>>({})
+  const [isEditLoading, setIsEditLoading] = useState(false)
   const [viewMode, setViewMode] = useState<'columns' | 'list'>('columns') // New state for view toggle
   const [selectedMember, setSelectedMember] = useState<string>('all')
   const [activeTimers, setActiveTimers] = useState<Record<string, { 
@@ -254,6 +257,16 @@ export function TaskBoard() {
         if (!isValidTransition) {
           throw new Error(`Invalid status transition from ${taskExists.status} to ${updates.status}`)
         }
+
+        // Confirm reopening completed tasks
+        if (taskExists.status === 'completed' && updates.status !== 'completed') {
+          const confirmed = confirm(
+            `Are you sure you want to reopen the completed task "${taskExists.title}"? This will change its status to ${updates.status}.`
+          )
+          if (!confirmed) {
+            return // User cancelled the operation
+          }
+        }
       }
 
       // Prepare update data with lifecycle management
@@ -264,9 +277,15 @@ export function TaskBoard() {
         updateData.progress = 100
       }
 
-      // Reset progress when moving back to pending
+      // Reset progress when moving back to pending from any other status
       if (updates.status === 'pending' && taskExists.status !== 'pending') {
         updateData.progress = 0
+      }
+
+      // When reopening completed tasks to in-progress, maintain current progress or set to reasonable value
+      if (updates.status === 'in-progress' && taskExists.status === 'completed') {
+        // Keep current progress if it's reasonable, otherwise set to 75%
+        updateData.progress = (taskExists.progress && taskExists.progress < 100) ? taskExists.progress : 75
       }
 
       console.log(`🔄 Updating task ${taskId} with:`, updateData)
@@ -315,10 +334,49 @@ export function TaskBoard() {
     const validTransitions: Record<string, string[]> = {
       'pending': ['in-progress', 'completed'],
       'in-progress': ['pending', 'completed'],
-      'completed': ['in-progress'] // Allow reopening completed tasks
+      'completed': ['pending', 'in-progress'] // Allow reopening completed tasks to both pending and in-progress
     }
 
     return validTransitions[currentStatus]?.includes(newStatus) || currentStatus === newStatus
+  }
+
+  const handlePreviewTask = (task: Task) => {
+    setSelectedTask(task)
+    setShowPreviewModal(true)
+  }
+
+  const handleEditTask = (task: Task) => {
+    setEditingTaskId(task.id)
+    setEditFormData({
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      deadline: task.deadline,
+      progress: task.progress,
+      assignees: task.assignees
+    })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingTaskId(null)
+    setEditFormData({})
+    setIsEditLoading(false)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingTaskId || !editFormData) return
+
+    try {
+      setIsEditLoading(true)
+      await handleUpdateTask(editingTaskId, editFormData)
+      setEditingTaskId(null)
+      setEditFormData({})
+    } catch (error) {
+      // Error is already handled in handleUpdateTask
+    } finally {
+      setIsEditLoading(false)
+    }
   }
 
   const handleDeleteTask = async (taskId: string) => {
@@ -711,14 +769,32 @@ export function TaskBoard() {
                   {filteredTasks.map((task) => (
                     <tr key={task.id} className="border-b hover:bg-muted/30 transition-colors">
                       <td className="p-3">
-                        <div>
-                          <div className="font-medium text-foreground">{task.title}</div>
-                          {task.description && (
-                            <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                              {task.description}
-                            </div>
-                          )}
-                        </div>
+                        {editingTaskId === task.id ? (
+                          <div className="space-y-2">
+                            <Input
+                              value={editFormData.title || ''}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, title: e.target.value }))}
+                              placeholder="Task title"
+                              className="font-medium"
+                            />
+                            <Textarea
+                              value={editFormData.description || ''}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
+                              placeholder="Task description"
+                              className="text-sm resize-none"
+                              rows={2}
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="font-medium text-foreground">{task.title}</div>
+                            {task.description && (
+                              <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                {task.description}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                                                                     <td className="p-3">
                           <div className="text-sm">
@@ -732,74 +808,156 @@ export function TaskBoard() {
                           </div>
                         </td>
                       <td className="p-3">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          task.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                          task.status === 'in-progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                          'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                        }`}>
-                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                        </span>
+                        {editingTaskId === task.id ? (
+                          <select
+                            value={editFormData.status || task.status}
+                            onChange={(e) => setEditFormData(prev => ({ ...prev, status: e.target.value as 'pending' | 'in-progress' | 'completed' }))}
+                            className="px-2 py-1 border border-input rounded-md bg-background text-sm"
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            task.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                            task.status === 'in-progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                          }`}>
+                            {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                          </span>
+                        )}
                       </td>
                       <td className="p-3">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          task.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                          task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                          'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                        }`}>
-                          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                        </span>
+                        {editingTaskId === task.id ? (
+                          <select
+                            value={editFormData.priority || task.priority}
+                            onChange={(e) => setEditFormData(prev => ({ ...prev, priority: e.target.value as 'low' | 'medium' | 'high' }))}
+                            className="px-2 py-1 border border-input rounded-md bg-background text-sm"
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                          </select>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            task.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                            task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                            'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                          }`}>
+                            {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                          </span>
+                        )}
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-16 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                            <div 
-                              className="bg-neon-blue h-2 rounded-full transition-all duration-300" 
-                              style={{ width: `${task.progress}%` }}
+                        {editingTaskId === task.id ? (
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={editFormData.progress || task.progress}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, progress: parseInt(e.target.value) }))}
+                              className="w-16 h-2"
                             />
+                            <Input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={editFormData.progress || task.progress}
+                              onChange={(e) => setEditFormData(prev => ({ ...prev, progress: parseInt(e.target.value) || 0 }))}
+                              className="w-16 h-8 text-xs"
+                            />
+                            <span className="text-xs">%</span>
                           </div>
-                          <span className="text-xs text-muted-foreground w-8">{task.progress}%</span>
-                        </div>
+                        ) : (
+                          <div className="flex items-center space-x-2">
+                            <div className="w-16 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                              <div
+                                className="bg-neon-blue h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${task.progress}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground w-8">{task.progress}%</span>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3">
-                        <div className="text-sm">
-                          {task.deadline ? (
-                            <span className={`${
-                              new Date(task.deadline) < new Date() && task.status !== 'completed'
-                                ? 'text-red-600 dark:text-red-400'
-                                : 'text-muted-foreground'
-                            }`}>
-                              {new Date(task.deadline).toLocaleDateString()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">No deadline</span>
-                          )}
-                        </div>
+                        {editingTaskId === task.id ? (
+                          <Input
+                            type="date"
+                            value={editFormData.deadline ? new Date(editFormData.deadline).toISOString().split('T')[0] : ''}
+                            onChange={(e) => setEditFormData(prev => ({ ...prev, deadline: e.target.value }))}
+                            className="text-sm"
+                          />
+                        ) : (
+                          <div className="text-sm">
+                            {task.deadline ? (
+                              <span className={`${
+                                new Date(task.deadline) < new Date() && task.status !== 'completed'
+                                  ? 'text-red-600 dark:text-red-400'
+                                  : 'text-muted-foreground'
+                              }`}>
+                                {new Date(task.deadline).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">No deadline</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3">
                         <div className="flex items-center space-x-1">
-                                                     {/* View Button */}
-                           <button
-                             onClick={() => {
-                               setSelectedTask(task)
-                               setShowPreviewModal(true)
-                             }}
-                             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                             title="View Details"
-                           >
-                             <Eye className="w-4 h-4" />
-                           </button>
-                           
-                           {/* Edit Button */}
-                           <button
-                             onClick={() => {
-                               setSelectedTask(task)
-                               setShowPreviewModal(true)
-                             }}
-                             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                             title="Edit Task"
-                           >
-                             <Edit className="w-4 h-4" />
-                           </button>
+                          {editingTaskId === task.id ? (
+                            <>
+                              {/* Save Button */}
+                              <button
+                                onClick={handleSaveEdit}
+                                disabled={isEditLoading}
+                                className="p-1 text-green-600 hover:text-green-700 transition-colors disabled:opacity-50"
+                                title="Save Changes"
+                              >
+                                {isEditLoading ? (
+                                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-green-600 border-t-transparent"></div>
+                                ) : (
+                                  <Check className="w-4 h-4" />
+                                )}
+                              </button>
+
+                              {/* Cancel Button */}
+                              <button
+                                onClick={handleCancelEdit}
+                                disabled={isEditLoading}
+                                className="p-1 text-red-600 hover:text-red-700 transition-colors disabled:opacity-50"
+                                title="Cancel Edit"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {/* View Button */}
+                              <button
+                                onClick={() => {
+                                  setSelectedTask(task)
+                                  setShowPreviewModal(true)
+                                }}
+                                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                                title="View Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+
+                              {/* Edit Button */}
+                              <button
+                                onClick={() => handleEditTask(task)}
+                                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                                title="Edit Task"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                           
                           {/* Timer Controls */}
                           {task.status === 'in-progress' && activeTimers[task.id] && (
@@ -930,6 +1088,7 @@ export function TaskBoard() {
                      task={task}
                      onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
+                     onPreview={handlePreviewTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
                      onResumeTimer={resumeTimer}
@@ -967,6 +1126,7 @@ export function TaskBoard() {
                      task={task}
                      onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
+                     onPreview={handlePreviewTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
                      onResumeTimer={resumeTimer}
@@ -1004,6 +1164,7 @@ export function TaskBoard() {
                      task={task}
                      onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
+                     onPreview={handlePreviewTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
                      onResumeTimer={resumeTimer}
@@ -1093,6 +1254,7 @@ interface SortableTaskCardProps {
   task: Task
   onUpdate: (taskId: string, updates: Partial<CreateTaskData>) => void
   onDelete: (taskId: string) => void
+  onPreview: (task: Task) => void
   onStartTimer: (taskId: string) => void
   onPauseTimer: (taskId: string) => void
   onResumeTimer: (taskId: string) => void
@@ -1114,6 +1276,7 @@ function SortableTaskCard({
   task,
   onUpdate,
   onDelete,
+  onPreview,
   onStartTimer,
   onPauseTimer,
   onResumeTimer,
@@ -1193,23 +1356,26 @@ function SortableTaskCard({
   const canComplete = task.status === 'in-progress'
   const canReopen = task.status === 'completed'
 
+  // Helper function to prevent drag on interactive elements
+  const preventDrag = (e: React.PointerEvent) => {
+    e.stopPropagation()
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 group transition-all duration-300 backdrop-blur-sm ${
-        isDragging 
-          ? 'shadow-2xl scale-105 rotate-2 border-neon-blue/70 bg-white/95 dark:bg-gray-800/95 z-50 ring-2 ring-neon-blue/50' 
+      {...attributes}
+      {...listeners}
+      className={`relative bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 group transition-all duration-300 backdrop-blur-sm cursor-grab active:cursor-grabbing ${
+        isDragging
+          ? 'shadow-2xl scale-105 rotate-2 border-neon-blue/70 bg-white/95 dark:bg-gray-800/95 z-50 ring-2 ring-neon-blue/50'
           : 'hover:shadow-xl hover:scale-[1.02] hover:border-neon-blue/50'
       }`}
     >
-      {/* Drag Handle */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        <div className="w-4 h-4 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
+      {/* Drag Handle Visual Indicator */}
+      <div className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+        <div className="w-4 h-4 text-gray-400 dark:text-gray-500">
           ⋮⋮
         </div>
       </div>
@@ -1411,8 +1577,24 @@ function SortableTaskCard({
         </div>
         
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 opacity-0 group-hover:opacity-100 transition-all duration-300">
+        <div
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 opacity-0 group-hover:opacity-100 transition-all duration-300"
+          onPointerDown={preventDrag}
+        >
           <div className="flex items-center flex-wrap gap-1 sm:gap-2">
+            {/* Preview Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onPreview(task)
+              }}
+              className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-medium rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+              title="View Task Details"
+            >
+              <Eye className="w-3 h-3" />
+              <span>View</span>
+            </button>
+
                          {/* Start Timer Button */}
              {canStartTimer && (
                <button
