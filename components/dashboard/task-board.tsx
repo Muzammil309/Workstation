@@ -203,13 +203,18 @@ export function TaskBoard() {
       if (error) {
         throw error
       }
-      
+
+      // Update project task counts if task is associated with a project
+      if (data.project_id) {
+        await updateProjectTaskCounts(data.project_id)
+      }
+
       // Reload tasks from database
       await loadTasks()
-      
+
       // Close modal
       setShowCreateModal(false)
-      
+
       toast({
         title: 'Success',
         description: 'Task created successfully!',
@@ -308,13 +313,29 @@ export function TaskBoard() {
       
       console.log(`✅ Task updated successfully:`, data)
       
+      // Update project task counts if project changed or status changed
+      const oldProjectId = taskExists.project_id
+      const newProjectId = updateData.project_id || oldProjectId
+      const statusChanged = updateData.status && updateData.status !== taskExists.status
+
+      if (statusChanged || (updateData.project_id && updateData.project_id !== oldProjectId)) {
+        // Update counts for old project if project changed
+        if (oldProjectId && updateData.project_id && oldProjectId !== updateData.project_id) {
+          await updateProjectTaskCounts(oldProjectId)
+        }
+        // Update counts for current project
+        if (newProjectId) {
+          await updateProjectTaskCounts(newProjectId)
+        }
+      }
+
       // Update local state immediately for better UX
       setTasks(prev => prev.map(task =>
         task.id === taskId
           ? { ...task, ...updateData }
           : task
       ))
-      
+
       toast({
         title: 'Success',
         description: 'Task updated successfully!',
@@ -343,6 +364,40 @@ export function TaskBoard() {
   const handlePreviewTask = (task: Task) => {
     setSelectedTask(task)
     setShowPreviewModal(true)
+  }
+
+  // Helper function to update project task counts
+  const updateProjectTaskCounts = async (projectId: string) => {
+    if (!projectId) return
+
+    try {
+      // Get all tasks for this project
+      const { data: projectTasks, error: tasksError } = await supabase
+        .from('tasks')
+        .select('status')
+        .eq('project_id', projectId)
+
+      if (tasksError) throw tasksError
+
+      const totalTasks = projectTasks?.length || 0
+      const completedTasks = projectTasks?.filter(task => task.status === 'completed').length || 0
+
+      // Update project counts
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({
+          taskscount: totalTasks,
+          completedtasks: completedTasks,
+          progress: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+        })
+        .eq('id', projectId)
+
+      if (updateError) throw updateError
+
+      console.log(`✅ Updated project ${projectId} task counts: ${completedTasks}/${totalTasks}`)
+    } catch (error) {
+      console.error('❌ Error updating project task counts:', error)
+    }
   }
 
   const handleEditTask = (task: Task) => {
@@ -392,16 +447,24 @@ export function TaskBoard() {
         throw new Error('Task not found')
       }
 
+      // Store project ID before deletion
+      const projectId = taskExists.project_id
+
       // Use direct Supabase call instead of TasksService
       const { error } = await supabase
         .from('tasks')
         .delete()
         .eq('id', taskId)
-      
+
       if (error) {
         throw error
       }
-      
+
+      // Update project task counts if task was associated with a project
+      if (projectId) {
+        await updateProjectTaskCounts(projectId)
+      }
+
       // Update local state immediately for better UX
       setTasks(prev => prev.filter(task => task.id !== taskId))
       

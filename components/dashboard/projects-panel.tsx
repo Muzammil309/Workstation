@@ -42,6 +42,7 @@ const priorityColors = {
 export function ProjectsPanel() {
   const { user } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
+  const [tasks, setTasks] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -63,31 +64,53 @@ export function ProjectsPanel() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const { toast } = useToast()
 
-  // Load projects from Supabase
+  // Load projects and tasks from Supabase
   useEffect(() => {
-    loadProjects()
+    loadProjectsAndTasks()
   }, [])
 
-  const loadProjects = async () => {
+  const loadProjectsAndTasks = async () => {
     try {
       setIsLoading(true)
-      const { data, error } = await supabase
+
+      // Load projects
+      const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('*')
         .order('created_at', { ascending: false })
 
-      if (error) throw error
-      setProjects(data || [])
+      if (projectsError) throw projectsError
+
+      // Load tasks
+      const { data: tasksData, error: tasksError } = await supabase
+        .from('tasks')
+        .select('id, project_id, status')
+
+      if (tasksError) throw tasksError
+
+      setProjects(projectsData || [])
+      setTasks(tasksData || [])
     } catch (error: any) {
-      console.error('Error loading projects:', error)
+      console.error('Error loading projects and tasks:', error)
       toast({
         title: "Error",
-        description: "Failed to load projects",
+        description: "Failed to load projects and tasks",
         variant: "destructive"
       })
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Keep the original loadProjects function for compatibility
+  const loadProjects = loadProjectsAndTasks
+
+  // Helper function to get real-time task counts for a project
+  const getProjectTaskCounts = (projectId: string) => {
+    const projectTasks = tasks.filter(task => task.project_id === projectId)
+    const totalTasks = projectTasks.length
+    const completedTasks = projectTasks.filter(task => task.status === 'completed').length
+    return { totalTasks, completedTasks }
   }
 
   const handleAddProject = async () => {
@@ -130,7 +153,7 @@ export function ProjectsPanel() {
 
       resetForm()
       setIsCreateModalOpen(false)
-      await loadProjects()
+      await loadProjectsAndTasks()
     } catch (error: any) {
       toast({
         title: "Error",
@@ -189,7 +212,7 @@ export function ProjectsPanel() {
       setIsEditModalOpen(false)
       setEditingProject(null)
       resetForm()
-      await loadProjects()
+      await loadProjectsAndTasks()
     } catch (error: any) {
       toast({
         title: "Error",
@@ -226,7 +249,7 @@ export function ProjectsPanel() {
         description: `Project "${projectName}" has been deleted`,
       })
 
-      await loadProjects()
+      await loadProjectsAndTasks()
     } catch (error: any) {
       toast({
         title: "Error",
@@ -483,7 +506,10 @@ export function ProjectsPanel() {
 
                          {/* Tasks Summary */}
              <div className="flex items-center justify-between text-sm">
-               <span className="text-muted-foreground">Tasks: {project.completedtasks}/{project.taskscount}</span>
+               {(() => {
+                 const { totalTasks, completedTasks } = getProjectTaskCounts(project.id)
+                 return <span className="text-muted-foreground">Tasks: {completedTasks}/{totalTasks}</span>
+               })()}
                <span className="text-muted-foreground">Created {new Date(project.created_at).toLocaleDateString()}</span>
              </div>
           </motion.div>
@@ -702,7 +728,10 @@ export function ProjectsPanel() {
                      </div>
                      <div>
                        <label className="text-sm font-medium text-muted-foreground">Tasks</label>
-                       <p className="text-sm">{viewingProject.completedtasks}/{viewingProject.taskscount}</p>
+                       {(() => {
+                         const { totalTasks, completedTasks } = getProjectTaskCounts(viewingProject.id)
+                         return <p className="text-sm">{completedTasks}/{totalTasks}</p>
+                       })()}
                      </div>
                      <div>
                        <label className="text-sm font-medium text-muted-foreground">Created</label>
