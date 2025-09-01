@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
+import { useUsers } from '@/hooks/use-users'
+import { filterTasksByAssignee } from '@/lib/user-utils'
 
 interface Task {
   id: string
@@ -57,14 +59,13 @@ export function CalendarView() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedAssignee, setSelectedAssignee] = useState<string>('all')
-  const [assignees, setAssignees] = useState<string[]>([])
   const { toast } = useToast()
   const { user } = useAuth()
+  const { users, isLoading: usersLoading } = useUsers()
 
   // Load tasks from Supabase
   useEffect(() => {
     loadTasks()
-    loadAssignees()
   }, [])
 
   const loadTasks = async () => {
@@ -89,31 +90,20 @@ export function CalendarView() {
     }
   }
 
-  const loadAssignees = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('name')
-        .eq('status', 'active')
 
-      if (error) throw error
-      const names = data?.map(user => user.name) || []
-      setAssignees(names)
-    } catch (error) {
-      console.error('Error loading assignees:', error)
-    }
-  }
 
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          task.description.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesType = filterType === 'all' || filterType === 'task'
-    const matchesAssignee = selectedAssignee === 'all' || task.assignee === selectedAssignee
-    return matchesSearch && matchesType && matchesAssignee
+    return matchesSearch && matchesType
   })
 
+  // Apply assignee filtering using the new utility function
+  const assigneeFilteredTasks = filterTasksByAssignee(filteredTasks, selectedAssignee)
+
   const getTasksForDate = (date: string) => {
-    return filteredTasks.filter(task => {
+    return assigneeFilteredTasks.filter(task => {
       const taskDeadline = new Date(task.deadline).toISOString().split('T')[0]
       return taskDeadline === date
     })
@@ -206,7 +196,7 @@ export function CalendarView() {
     }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
   }
 
-  if (isLoading) {
+  if (isLoading || usersLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -358,10 +348,11 @@ export function CalendarView() {
           value={selectedAssignee}
           onChange={(e) => setSelectedAssignee(e.target.value)}
           className="px-3 py-2 border border-input rounded-md bg-background text-sm"
+          disabled={usersLoading}
         >
           <option value="all">All Assignees</option>
-          {assignees.map(assignee => (
-            <option key={assignee} value={assignee}>{assignee}</option>
+          {users.map(user => (
+            <option key={user.id} value={user.id}>{user.name}</option>
           ))}
         </select>
         <select

@@ -83,11 +83,12 @@ export function ReportsPanel() {
 
       // Process team members data
       const teamMembersData = users?.map(user => {
-        const userTasks = tasks?.filter(task => task.assignee === user.name) || []
+        // Fix: Check if user ID is in the assignees array
+        const userTasks = tasks?.filter(task => task.assignees && task.assignees.includes(user.id)) || []
         const completedTasks = userTasks.filter(task => task.status === 'completed').length
         const totalTasks = userTasks.length
         const productivity = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
-        
+
         return {
           id: user.id,
           name: user.name,

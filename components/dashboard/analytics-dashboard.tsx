@@ -44,6 +44,7 @@ export function AnalyticsDashboard() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<TaskStats>({
     total: 0,
     pending: 0,
@@ -63,7 +64,8 @@ export function AnalyticsDashboard() {
   const fetchData = async () => {
     try {
       setLoading(true)
-      
+      setError(null)
+
       // Fetch tasks
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
@@ -75,18 +77,19 @@ export function AnalyticsDashboard() {
       // Fetch users
       const { data: usersData, error: usersError } = await supabase
         .from('users')
-        .select('id, name, email, role, department')
+        .select('id, name, email, role, department, status')
         .eq('status', 'active')
 
       if (usersError) throw usersError
 
       setTasks(tasksData || [])
       setUsers(usersData || [])
-      
+
       // Calculate statistics
       calculateStats(tasksData || [])
     } catch (error) {
       console.error('Error fetching analytics data:', error)
+      setError(error instanceof Error ? error.message : 'Failed to load analytics data')
     } finally {
       setLoading(false)
     }
@@ -123,11 +126,12 @@ export function AnalyticsDashboard() {
   const getDepartmentPerformance = () => {
     const departmentStats = users.reduce((acc, user) => {
       if (user.department && user.role !== 'admin') {
-        const userTasks = tasks.filter(t => t.assignee === user.id)
+        // Fix: Check if user ID is in the assignees array
+        const userTasks = tasks.filter(t => t.assignees && t.assignees.includes(user.id))
         const completedTasks = userTasks.filter(t => t.status === 'completed').length
         const totalTasks = userTasks.length
         const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
-        
+
         if (!acc[user.department]) {
           acc[user.department] = { total: 0, completed: 0, users: 0 }
         }
@@ -154,17 +158,28 @@ export function AnalyticsDashboard() {
     }).reverse()
 
     return last7Days.map(date => {
-      const dayTasks = tasks.filter(t => 
-        new Date(t.created_at).toISOString().split('T')[0] === date
-      )
-      const completedTasks = dayTasks.filter(t => t.status === 'completed').length
+      // Get tasks created on this date
+      const dayTasks = tasks.filter(t => {
+        if (!t.created_at) return false
+        const taskDate = new Date(t.created_at).toISOString().split('T')[0]
+        return taskDate === date
+      })
+
+      // Get tasks completed on this date (regardless of creation date)
+      const completedOnDay = tasks.filter(t => {
+        if (!t.updated_at || t.status !== 'completed') return false
+        const completedDate = new Date(t.updated_at).toISOString().split('T')[0]
+        return completedDate === date
+      }).length
+
       const totalTasks = dayTasks.length
+      const completionRate = totalTasks > 0 ? (completedOnDay / totalTasks) * 100 : 0
 
       return {
         date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        completed: completedTasks,
+        completed: completedOnDay,
         total: totalTasks,
-        completionRate: totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
+        completionRate: Math.round(completionRate * 100) / 100
       }
     })
   }
@@ -173,12 +188,13 @@ export function AnalyticsDashboard() {
     return users
       .filter(u => u.role !== 'admin')
       .map(user => {
-        const userTasks = tasks.filter(t => t.assignee === user.id)
+        // Fix: Check if user ID is in the assignees array
+        const userTasks = tasks.filter(t => t.assignees && t.assignees.includes(user.id))
         const completedTasks = userTasks.filter(t => t.status === 'completed').length
         const totalTasks = userTasks.length
         const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
-        const avgProgress = userTasks.length > 0 
-          ? userTasks.reduce((sum, t) => sum + t.progress, 0) / userTasks.length 
+        const avgProgress = userTasks.length > 0
+          ? userTasks.reduce((sum, t) => sum + (t.progress || 0), 0) / userTasks.length
           : 0
 
         return {
@@ -204,13 +220,39 @@ export function AnalyticsDashboard() {
     )
   }
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <div className="text-red-500 text-center">
+          <h3 className="text-lg font-semibold">Error Loading Analytics</h3>
+          <p className="text-sm">{error}</p>
+        </div>
+        <button
+          onClick={fetchData}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
-        <p className="text-muted-foreground">
-          Real-time insights into team performance and task metrics
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
+          <p className="text-muted-foreground">
+            Real-time insights into team performance and task metrics
+          </p>
+        </div>
+        <button
+          onClick={fetchData}
+          disabled={loading}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+        >
+          {loading ? 'Refreshing...' : 'Refresh Data'}
+        </button>
       </div>
 
       {/* Key Metrics Cards */}

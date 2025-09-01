@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { TasksService, CreateTaskData } from '@/lib/tasks-service'
+import { useUsers } from '@/hooks/use-users'
+import { filterTasksByAssignee, formatAssigneeNames, getAssigneeInitials } from '@/lib/user-utils'
 
 // Define our own Task interface to match the database schema
 interface Task {
@@ -62,6 +64,7 @@ export function TaskBoard() {
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [viewMode, setViewMode] = useState<'columns' | 'list'>('columns') // New state for view toggle
+  const [selectedMember, setSelectedMember] = useState<string>('all')
   const [activeTimers, setActiveTimers] = useState<Record<string, { 
     startTime: number; 
     elapsed: number; 
@@ -72,6 +75,7 @@ export function TaskBoard() {
   
   const { user } = useAuth()
   const { toast } = useToast()
+  const { users, isLoading: usersLoading, getUsersByIds } = useUsers()
 
   // Drag & Drop sensors
   const sensors = useSensors(
@@ -238,13 +242,40 @@ export function TaskBoard() {
         throw new Error('Invalid task priority')
       }
 
-      console.log(`🔄 Updating task ${taskId} with:`, updates)
+      // Check if task exists and validate status transitions
+      const taskExists = tasks.find(task => task.id === taskId)
+      if (!taskExists) {
+        throw new Error('Task not found')
+      }
+
+      // Validate status transitions
+      if (updates.status && taskExists.status !== updates.status) {
+        const isValidTransition = validateStatusTransition(taskExists.status, updates.status)
+        if (!isValidTransition) {
+          throw new Error(`Invalid status transition from ${taskExists.status} to ${updates.status}`)
+        }
+      }
+
+      // Prepare update data with lifecycle management
+      const updateData = { ...updates }
+
+      // Auto-set progress to 100% when completing a task
+      if (updates.status === 'completed') {
+        updateData.progress = 100
+      }
+
+      // Reset progress when moving back to pending
+      if (updates.status === 'pending' && taskExists.status !== 'pending') {
+        updateData.progress = 0
+      }
+
+      console.log(`🔄 Updating task ${taskId} with:`, updateData)
 
       // Use direct Supabase call instead of TasksService
       const { data, error } = await supabase
         .from('tasks')
         .update({
-          ...updates,
+          ...updateData,
           updated_at: new Date().toISOString()
         })
         .eq('id', taskId)
@@ -259,9 +290,9 @@ export function TaskBoard() {
       console.log(`✅ Task updated successfully:`, data)
       
       // Update local state immediately for better UX
-      setTasks(prev => prev.map(task => 
-        task.id === taskId 
-          ? { ...task, ...updates }
+      setTasks(prev => prev.map(task =>
+        task.id === taskId
+          ? { ...task, ...updateData }
           : task
       ))
       
@@ -277,6 +308,17 @@ export function TaskBoard() {
         variant: 'destructive',
       })
     }
+  }
+
+  // Validate status transitions
+  const validateStatusTransition = (currentStatus: string, newStatus: string): boolean => {
+    const validTransitions: Record<string, string[]> = {
+      'pending': ['in-progress', 'completed'],
+      'in-progress': ['pending', 'completed'],
+      'completed': ['in-progress'] // Allow reopening completed tasks
+    }
+
+    return validTransitions[currentStatus]?.includes(newStatus) || currentStatus === newStatus
   }
 
   const handleDeleteTask = async (taskId: string) => {
@@ -428,12 +470,19 @@ export function TaskBoard() {
         console.log(`🔄 Moving task "${activeTask.title}" from ${activeTask.status} to ${newStatus}`)
         
         // Update task status in database
+        const updateData: any = {
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        }
+
+        // Set progress to 100% when task is completed
+        if (newStatus === 'completed') {
+          updateData.progress = 100
+        }
+
         const { error } = await supabase
           .from('tasks')
-          .update({ 
-            status: newStatus,
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', activeTask.id)
         
         if (error) {
@@ -447,9 +496,13 @@ export function TaskBoard() {
         }
         
         // Update local state
-        setTasks(prev => prev.map(task => 
-          task.id === activeTask.id 
-            ? { ...task, status: newStatus }
+        setTasks(prev => prev.map(task =>
+          task.id === activeTask.id
+            ? {
+                ...task,
+                status: newStatus,
+                progress: newStatus === 'completed' ? 100 : task.progress
+              }
             : task
         ))
         
@@ -546,7 +599,7 @@ export function TaskBoard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-muted-foreground text-sm">Pending</p>
-                <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">{tasks.filter(t => t.status === 'pending').length}</p>
+                <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">{filterTasksByAssignee(tasks, selectedMember).filter(t => t.status === 'pending').length}</p>
               </div>
               <div className="w-10 h-10 bg-gray-500/20 rounded-lg flex items-center justify-center">
                 <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
@@ -558,7 +611,7 @@ export function TaskBoard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-muted-foreground text-sm">In Progress</p>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{tasks.filter(t => t.status === 'in-progress').length}</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{filterTasksByAssignee(tasks, selectedMember).filter(t => t.status === 'in-progress').length}</p>
               </div>
               <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
                 <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -570,7 +623,7 @@ export function TaskBoard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-muted-foreground text-sm">Completed</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{tasks.filter(t => t.status === 'completed').length}</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{filterTasksByAssignee(tasks, selectedMember).filter(t => t.status === 'completed').length}</p>
               </div>
               <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
                 <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -605,8 +658,33 @@ export function TaskBoard() {
          onTaskUpdate={handleUpdateTask}
        />
 
+      {/* Member Filter */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-2">
+          <label htmlFor="member-filter" className="text-sm font-medium">
+            Filter by Member:
+          </label>
+          <select
+            id="member-filter"
+            value={selectedMember}
+            onChange={(e) => setSelectedMember(e.target.value)}
+            className="px-3 py-2 border border-input rounded-md bg-background text-sm min-w-[200px]"
+            disabled={usersLoading}
+          >
+            <option value="all">All Members</option>
+            {users.map(user => (
+              <option key={user.id} value={user.id}>{user.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {/* Task Display - Toggle between Columns and List */}
-      {viewMode === 'list' ? (
+      {(() => {
+        // Apply member filtering to tasks
+        const filteredTasks = filterTasksByAssignee(tasks, selectedMember)
+
+        return viewMode === 'list' ? (
         // List View - Optimized for admin tracking
         <div className="space-y-4">
           <div className="bg-card border rounded-lg p-4">
@@ -630,7 +708,7 @@ export function TaskBoard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tasks.map((task) => (
+                  {filteredTasks.map((task) => (
                     <tr key={task.id} className="border-b hover:bg-muted/30 transition-colors">
                       <td className="p-3">
                         <div>
@@ -646,7 +724,7 @@ export function TaskBoard() {
                           <div className="text-sm">
                             {task.assignees && task.assignees.length > 0 ? (
                               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                {task.assignees.length === 1 ? 'Assigned to member' : `${task.assignees.length} members`}
+                                {formatAssigneeNames(getUsersByIds(task.assignees))}
                               </span>
                             ) : (
                               <span className="text-muted-foreground">Unassigned</span>
@@ -831,22 +909,22 @@ export function TaskBoard() {
         >
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Pending Column */}
-          <DroppableColumn 
-            status="pending" 
-            title="Pending" 
+          <DroppableColumn
+            status="pending"
+            title="Pending"
             color="gray"
-            taskCount={tasks.filter(task => task.status === 'pending').length}
+            taskCount={filteredTasks.filter(task => task.status === 'pending').length}
           >
-            {tasks.filter(task => task.status === 'pending').length === 0 ? (
+            {filteredTasks.filter(task => task.status === 'pending').length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
                 No pending tasks
               </div>
             ) : (
               <SortableContext
-                items={tasks.filter(task => task.status === 'pending').map(t => t.id)}
+                items={filteredTasks.filter(task => task.status === 'pending').map(t => t.id)}
                 strategy={verticalListSortingStrategy}
               >
-                                 {tasks.filter(task => task.status === 'pending').map((task) => (
+                                 {filteredTasks.filter(task => task.status === 'pending').map((task) => (
                    <SortableTaskCard 
                      key={task.id} 
                      task={task} 
@@ -867,22 +945,22 @@ export function TaskBoard() {
           </DroppableColumn>
 
           {/* In Progress Column */}
-          <DroppableColumn 
-            status="in-progress" 
-            title="In Progress" 
+          <DroppableColumn
+            status="in-progress"
+            title="In Progress"
             color="blue"
-            taskCount={tasks.filter(task => task.status === 'in-progress').length}
+            taskCount={filteredTasks.filter(task => task.status === 'in-progress').length}
           >
-            {tasks.filter(task => task.status === 'in-progress').length === 0 ? (
+            {filteredTasks.filter(task => task.status === 'in-progress').length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
                 No tasks in progress
               </div>
             ) : (
               <SortableContext
-                items={tasks.filter(task => task.status === 'in-progress').map(t => t.id)}
+                items={filteredTasks.filter(task => task.status === 'in-progress').map(t => t.id)}
                 strategy={verticalListSortingStrategy}
               >
-                                 {tasks.filter(task => task.status === 'in-progress').map((task) => (
+                                 {filteredTasks.filter(task => task.status === 'in-progress').map((task) => (
                    <SortableTaskCard 
                      key={task.id} 
                      task={task} 
@@ -903,22 +981,22 @@ export function TaskBoard() {
           </DroppableColumn>
 
           {/* Completed Column */}
-          <DroppableColumn 
-            status="completed" 
-            title="Completed" 
+          <DroppableColumn
+            status="completed"
+            title="Completed"
             color="green"
-            taskCount={tasks.filter(task => task.status === 'completed').length}
+            taskCount={filteredTasks.filter(task => task.status === 'completed').length}
           >
-            {tasks.filter(task => task.status === 'completed').length === 0 ? (
+            {filteredTasks.filter(task => task.status === 'completed').length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
                 No completed tasks
               </div>
             ) : (
               <SortableContext
-                items={tasks.filter(task => task.status === 'completed').map(t => t.id)}
+                items={filteredTasks.filter(task => task.status === 'completed').map(t => t.id)}
                 strategy={verticalListSortingStrategy}
               >
-                                 {tasks.filter(task => task.status === 'completed').map((task) => (
+                                 {filteredTasks.filter(task => task.status === 'completed').map((task) => (
                    <SortableTaskCard 
                      key={task.id} 
                      task={task} 
@@ -939,7 +1017,8 @@ export function TaskBoard() {
           </DroppableColumn>
         </div>
       </DndContext>
-      )}
+      )
+      })()}
     </div>
   )
 }
@@ -1071,12 +1150,17 @@ function SortableTaskCard({
   // Calculate time remaining until deadline
   const getTimeRemaining = () => {
     if (!task.deadline) return null
-    
+
+    // Don't show overdue warnings for completed tasks
+    if (task.status === 'completed') {
+      return { text: 'Completed', isOverdue: false, isCompleted: true }
+    }
+
     const now = new Date()
     const deadline = new Date(task.deadline)
     const diffTime = deadline.getTime() - now.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
+
     if (diffDays < 0) return { text: `${Math.abs(diffDays)} days overdue`, isOverdue: true }
     if (diffDays === 0) return { text: 'Due today', isOverdue: false }
     if (diffDays === 1) return { text: '1 day left', isOverdue: false }
@@ -1149,10 +1233,10 @@ function SortableTaskCard({
             {task.assignees && task.assignees.length > 0 && (
               <div className="flex items-center space-x-2 text-sm">
                 <div className="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
-                  {task.assignees.length > 1 ? 'M' : (assignedUser?.name?.charAt(0) || '?')}
+                  {getAssigneeInitials(getUsersByIds(task.assignees))}
                 </div>
                 <span className="text-gray-600 dark:text-gray-300 font-medium">
-                  {task.assignees.length > 1 ? `${task.assignees.length} members` : (assignedUser?.name || 'Unknown User')}
+                  {formatAssigneeNames(getUsersByIds(task.assignees))}
                 </span>
               </div>
             )}
@@ -1181,8 +1265,10 @@ function SortableTaskCard({
               </div>
               {timeRemaining && (
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  timeRemaining.isOverdue 
-                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' 
+                  timeRemaining.isCompleted
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                    : timeRemaining.isOverdue
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
                     : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
                 }`}>
                   {timeRemaining.text}
