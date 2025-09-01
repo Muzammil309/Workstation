@@ -8,6 +8,7 @@ export interface Task {
   priority: 'low' | 'medium' | 'high'
   assignee_id?: string
   assignee?: string
+  assignees?: string[]
   project_id?: string
   deadline?: string
   assigned_on?: string
@@ -29,6 +30,7 @@ export interface CreateTaskData {
   priority?: 'low' | 'medium' | 'high'
   assignee_id?: string
   assignee?: string
+  assignees?: string[]
   project_id?: string
   deadline?: string
   assigned_on?: string

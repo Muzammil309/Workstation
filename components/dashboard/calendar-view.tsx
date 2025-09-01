@@ -16,7 +16,8 @@ interface Task {
   title: string
   description: string
   deadline: string
-  assignee: string
+  assignee?: string
+  assignees?: string[]
   priority: 'low' | 'medium' | 'high'
   status: 'pending' | 'in-progress' | 'completed'
   estimated_hours?: number
@@ -281,7 +282,7 @@ export function CalendarView() {
             <Users className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-medium text-muted-foreground">Team Members</span>
           </div>
-          <div className="text-2xl font-bold mt-2">{assignees.length}</div>
+          <div className="text-2xl font-bold mt-2">{users.length}</div>
         </motion.div>
       </div>
 

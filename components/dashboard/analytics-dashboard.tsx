@@ -12,11 +12,13 @@ interface Task {
   title: string
   status: 'pending' | 'in-progress' | 'completed'
   priority: 'low' | 'medium' | 'high'
-  assignee: string
-  estimatedHours: number
-  progress: number
+  assignee?: string
+  assignees?: string[]
+  estimatedHours?: number
+  progress?: number
   created_at: string
-  deadline: string
+  deadline?: string
+  updated_at?: string
 }
 
 interface User {
@@ -102,8 +104,8 @@ export function AnalyticsDashboard() {
       pending: tasksData.filter(t => t.status === 'pending').length,
       inProgress: tasksData.filter(t => t.status === 'in-progress').length,
       completed: tasksData.filter(t => t.status === 'completed').length,
-      overdue: tasksData.filter(t => new Date(t.deadline) < now && t.status !== 'completed').length,
-      onTime: tasksData.filter(t => new Date(t.deadline) >= now || t.status === 'completed').length,
+      overdue: tasksData.filter(t => t.deadline && new Date(t.deadline) < now && t.status !== 'completed').length,
+      onTime: tasksData.filter(t => (t.deadline && new Date(t.deadline) >= now) || t.status === 'completed').length,
       highPriority: tasksData.filter(t => t.priority === 'high').length,
       mediumPriority: tasksData.filter(t => t.priority === 'medium').length,
       lowPriority: tasksData.filter(t => t.priority === 'low').length
@@ -126,8 +128,16 @@ export function AnalyticsDashboard() {
   const getDepartmentPerformance = () => {
     const departmentStats = users.reduce((acc, user) => {
       if (user.department && user.role !== 'admin') {
-        // Fix: Check if user ID is in the assignees array
-        const userTasks = tasks.filter(t => t.assignees && t.assignees.includes(user.id))
+        // Handle both assignees array and single assignee field
+        const userTasks = tasks.filter(t => {
+          if (t.assignees && Array.isArray(t.assignees)) {
+            return t.assignees.includes(user.id)
+          }
+          if (t.assignee) {
+            return t.assignee === user.id || t.assignee === user.name
+          }
+          return false
+        })
         const completedTasks = userTasks.filter(t => t.status === 'completed').length
         const totalTasks = userTasks.length
         const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
@@ -188,8 +198,16 @@ export function AnalyticsDashboard() {
     return users
       .filter(u => u.role !== 'admin')
       .map(user => {
-        // Fix: Check if user ID is in the assignees array
-        const userTasks = tasks.filter(t => t.assignees && t.assignees.includes(user.id))
+        // Handle both assignees array and single assignee field
+        const userTasks = tasks.filter(t => {
+          if (t.assignees && Array.isArray(t.assignees)) {
+            return t.assignees.includes(user.id)
+          }
+          if (t.assignee) {
+            return t.assignee === user.id || t.assignee === user.name
+          }
+          return false
+        })
         const completedTasks = userTasks.filter(t => t.status === 'completed').length
         const totalTasks = userTasks.length
         const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0

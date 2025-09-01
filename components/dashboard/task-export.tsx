@@ -18,7 +18,8 @@ interface Task {
   deadline: string
   actualTime?: string
   notes?: string
-  assignee: string
+  assignee?: string
+  assignees?: string[]
   priority: 'low' | 'medium' | 'high'
   estimatedHours?: number
   tags?: string[]

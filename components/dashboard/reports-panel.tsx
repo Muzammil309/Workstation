@@ -13,10 +13,11 @@ interface Task {
   title: string
   status: 'pending' | 'in-progress' | 'completed'
   priority: 'low' | 'medium' | 'high'
-  assignee: string
-  project: string
-  deadline: string
-  assignedOn: string
+  assignee?: string
+  assignees?: string[]
+  project?: string
+  deadline?: string
+  assignedOn?: string
   actualTime?: string
   estimatedHours?: number
 }
@@ -83,8 +84,16 @@ export function ReportsPanel() {
 
       // Process team members data
       const teamMembersData = users?.map(user => {
-        // Fix: Check if user ID is in the assignees array
-        const userTasks = tasks?.filter(task => task.assignees && task.assignees.includes(user.id)) || []
+        // Handle both assignees array and single assignee field
+        const userTasks = tasks?.filter(task => {
+          if (task.assignees && Array.isArray(task.assignees)) {
+            return task.assignees.includes(user.id)
+          }
+          if (task.assignee) {
+            return task.assignee === user.id || task.assignee === user.name
+          }
+          return false
+        }) || []
         const completedTasks = userTasks.filter(task => task.status === 'completed').length
         const totalTasks = userTasks.length
         const productivity = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
@@ -132,6 +141,7 @@ export function ReportsPanel() {
 
   const generateTaskPerformanceReport = () => {
     const filteredTasks = sampleTasks.filter(task => {
+      if (!task.assignedOn) return false
       const taskDate = new Date(task.assignedOn)
       const cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() - parseInt(dateRange))
@@ -156,7 +166,8 @@ export function ReportsPanel() {
     }
 
     const projectBreakdown = filteredTasks.reduce((acc, task) => {
-      acc[task.project] = (acc[task.project] || 0) + 1
+      const project = task.project || 'Unassigned'
+      acc[project] = (acc[project] || 0) + 1
       return acc
     }, {} as Record<string, number>)
 

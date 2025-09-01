@@ -925,10 +925,10 @@ export function TaskBoard() {
                 strategy={verticalListSortingStrategy}
               >
                                  {filteredTasks.filter(task => task.status === 'pending').map((task) => (
-                   <SortableTaskCard 
-                     key={task.id} 
-                     task={task} 
-                     onUpdate={handleUpdateTask} 
+                   <SortableTaskCard
+                     key={task.id}
+                     task={task}
+                     onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
@@ -938,6 +938,7 @@ export function TaskBoard() {
                      formatTime={formatTime}
                      toast={toast}
                      allTasks={tasks}
+                     getUsersByIds={getUsersByIds}
                    />
                  ))}
               </SortableContext>
@@ -961,10 +962,10 @@ export function TaskBoard() {
                 strategy={verticalListSortingStrategy}
               >
                                  {filteredTasks.filter(task => task.status === 'in-progress').map((task) => (
-                   <SortableTaskCard 
-                     key={task.id} 
-                     task={task} 
-                     onUpdate={handleUpdateTask} 
+                   <SortableTaskCard
+                     key={task.id}
+                     task={task}
+                     onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
@@ -974,6 +975,7 @@ export function TaskBoard() {
                      formatTime={formatTime}
                      toast={toast}
                      allTasks={tasks}
+                     getUsersByIds={getUsersByIds}
                    />
                  ))}
               </SortableContext>
@@ -997,10 +999,10 @@ export function TaskBoard() {
                 strategy={verticalListSortingStrategy}
               >
                                  {filteredTasks.filter(task => task.status === 'completed').map((task) => (
-                   <SortableTaskCard 
-                     key={task.id} 
-                     task={task} 
-                     onUpdate={handleUpdateTask} 
+                   <SortableTaskCard
+                     key={task.id}
+                     task={task}
+                     onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
@@ -1010,6 +1012,7 @@ export function TaskBoard() {
                      formatTime={formatTime}
                      toast={toast}
                      allTasks={tasks}
+                     getUsersByIds={getUsersByIds}
                    />
                  ))}
               </SortableContext>
@@ -1094,30 +1097,32 @@ interface SortableTaskCardProps {
   onPauseTimer: (taskId: string) => void
   onResumeTimer: (taskId: string) => void
   onStopTimer: (taskId: string) => void
-  activeTimers: Record<string, { 
-    startTime: number; 
-    elapsed: number; 
-    isPaused: boolean; 
-    pausedAt: number; 
+  activeTimers: Record<string, {
+    startTime: number;
+    elapsed: number;
+    isPaused: boolean;
+    pausedAt: number;
     totalPausedTime: number;
   }>
   formatTime: (ms: number) => string
   toast: any
   allTasks: Task[]
+  getUsersByIds: (ids: string[]) => any[]
 }
 
-function SortableTaskCard({ 
-  task, 
-  onUpdate, 
-  onDelete, 
-  onStartTimer, 
-  onPauseTimer, 
-  onResumeTimer, 
-  onStopTimer, 
-  activeTimers, 
+function SortableTaskCard({
+  task,
+  onUpdate,
+  onDelete,
+  onStartTimer,
+  onPauseTimer,
+  onResumeTimer,
+  onStopTimer,
+  activeTimers,
   formatTime,
   toast,
-  allTasks
+  allTasks,
+  getUsersByIds
 }: SortableTaskCardProps) {
   const { user } = useAuth()
   const [assignedUser, setAssignedUser] = useState<any>(null)
