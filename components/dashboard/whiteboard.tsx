@@ -26,7 +26,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
-import { ErrorBoundary, DashboardErrorFallback, useErrorHandler } from '@/components/error-boundary'
+import { ErrorBoundary, DashboardErrorFallback } from '@/components/error-boundary'
 
 interface DrawingElement {
   id: string
@@ -53,7 +53,6 @@ interface TaskCreationData {
 function WhiteboardContent() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const { handleError } = useErrorHandler()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [currentTool, setCurrentTool] = useState<'pen' | 'rectangle' | 'circle' | 'text' | 'eraser'>('pen')
@@ -91,12 +90,16 @@ function WhiteboardContent() {
         await Promise.all([loadUsers(), loadWhiteboardData()])
       } catch (error) {
         console.error('Failed to initialize whiteboard:', error)
-        handleError(error as Error)
+        toast({
+          title: "Error",
+          description: "Failed to initialize whiteboard",
+          variant: "destructive"
+        })
       }
     }
 
     initializeWhiteboard()
-  }, [handleError])
+  }, [])
 
   const loadUsers = async () => {
     try {
@@ -193,7 +196,7 @@ function WhiteboardContent() {
     })
     } catch (error) {
       console.error('Error redrawing canvas:', error)
-      handleError(error as Error)
+      // Don't use handleError in render functions to avoid hook issues
     }
   }
 

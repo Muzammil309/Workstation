@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { formatAssigneeNames } from '@/lib/user-utils'
-import { ErrorBoundary, DashboardErrorFallback, useErrorHandler } from '@/components/error-boundary'
+import { ErrorBoundary, DashboardErrorFallback } from '@/components/error-boundary'
 
 interface Task {
   id: string
@@ -36,7 +36,6 @@ interface Project {
 function TodoListContent() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const { handleError } = useErrorHandler()
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -59,13 +58,18 @@ function TodoListContent() {
           await Promise.all([loadUserTasks(), loadProjects()])
         } catch (error) {
           console.error('Failed to initialize todo list:', error)
-          handleError(error as Error)
+          // Don't use handleError in useEffect to avoid dependency issues
+          toast({
+            title: "Error",
+            description: "Failed to initialize todo list",
+            variant: "destructive"
+          })
         }
       }
     }
 
     initializeTodoList()
-  }, [user, handleError])
+  }, [user])
 
   const loadUserTasks = async () => {
     try {

@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { showNotification } from '@/lib/notifications'
-import { ErrorBoundary, DashboardErrorFallback, useErrorHandler } from '@/components/error-boundary'
+import { ErrorBoundary, DashboardErrorFallback } from '@/components/error-boundary'
 
 interface Message {
   id: string
@@ -36,7 +36,6 @@ interface User {
 function TeamInboxContent() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const { handleError } = useErrorHandler()
   const [messages, setMessages] = useState<Message[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [newMessage, setNewMessage] = useState('')
