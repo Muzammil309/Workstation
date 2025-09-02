@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { showNotification } from '@/lib/notifications'
+import { ErrorBoundary, DashboardErrorFallback, useErrorHandler } from '@/components/error-boundary'
 
 interface Message {
   id: string
@@ -32,9 +33,10 @@ interface User {
   role: string
 }
 
-export function TeamInbox() {
+function TeamInboxContent() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { handleError } = useErrorHandler()
 
   if (!user) {
     return (
@@ -383,5 +385,14 @@ export function TeamInbox() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// Export wrapped component with error boundary
+export function TeamInbox() {
+  return (
+    <ErrorBoundary fallback={DashboardErrorFallback}>
+      <TeamInboxContent />
+    </ErrorBoundary>
   )
 }

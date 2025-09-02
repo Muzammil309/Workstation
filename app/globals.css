@@ -163,6 +163,39 @@
     border-right: 1px solid hsl(var(--sidebar-border));
     @apply shadow-sm;
   }
+
+  /* Custom scrollbar styles for sidebar */
+  .sidebar-light nav::-webkit-scrollbar,
+  .sidebar-dark nav::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .sidebar-light nav::-webkit-scrollbar-track,
+  .sidebar-dark nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar-light nav::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+
+  .sidebar-dark nav::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+
+  .sidebar-light nav::-webkit-scrollbar-thumb:hover,
+  .sidebar-dark nav::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Firefox scrollbar */
+  .sidebar-light nav,
+  .sidebar-dark nav {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
 }
 
 /* Custom scrollbar */
@@ -244,30 +277,30 @@ div:has(> span:contains("Testing Database Connection")) {
   color: hsl(var(--muted-foreground));
 }
 
-/* Priority color indicators */
+/* Priority color indicators - Modern, professional colors */
 .priority-high {
-  @apply border-l-4 border-red-500 bg-red-50 dark:bg-red-950/20;
+  @apply border-l-4 border-rose-500 bg-rose-50/50 dark:bg-rose-950/20;
 }
 
 .priority-medium {
-  @apply border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20;
+  @apply border-l-4 border-amber-500 bg-amber-50/50 dark:bg-amber-950/20;
 }
 
 .priority-low {
-  @apply border-l-4 border-green-500 bg-green-50 dark:bg-green-950/20;
+  @apply border-l-4 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20;
 }
 
-/* Status indicators */
+/* Status indicators - Modern, professional colors */
 .status-pending {
-  @apply bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200;
+  @apply bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200;
 }
 
 .status-in-progress {
-  @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200;
+  @apply bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200;
 }
 
 .status-completed {
-  @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200;
+  @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200;
 }
 
 .task-card-dark:hover {

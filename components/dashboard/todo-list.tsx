@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { formatAssigneeNames } from '@/lib/user-utils'
+import { ErrorBoundary, DashboardErrorFallback, useErrorHandler } from '@/components/error-boundary'
 
 interface Task {
   id: string
@@ -32,9 +33,10 @@ interface Project {
   color: string
 }
 
-export function TodoList() {
+function TodoListContent() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { handleError } = useErrorHandler()
 
   if (!user) {
     return (
@@ -51,23 +53,39 @@ export function TodoList() {
   const [filterPriority, setFilterPriority] = useState<string>('all')
 
   useEffect(() => {
-    if (user) {
-      loadUserTasks()
-      loadProjects()
+    const initializeTodoList = async () => {
+      if (user) {
+        try {
+          await Promise.all([loadUserTasks(), loadProjects()])
+        } catch (error) {
+          console.error('Failed to initialize todo list:', error)
+          handleError(error as Error)
+        }
+      }
     }
-  }, [user])
+
+    initializeTodoList()
+  }, [user, handleError])
 
   const loadUserTasks = async () => {
     try {
       setIsLoading(true)
+
+      if (!user?.id) {
+        throw new Error('User ID is required to load tasks')
+      }
+
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .contains('assignees', [user?.id || ''])
+        .contains('assignees', [user.id])
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setTasks(data || [])
+
+      // Ensure data is an array
+      const tasksData = Array.isArray(data) ? data : []
+      setTasks(tasksData)
     } catch (error: any) {
       console.error('Error loading user tasks:', error)
       toast({
@@ -75,6 +93,8 @@ export function TodoList() {
         description: "Failed to load your tasks",
         variant: "destructive"
       })
+      // Set empty array on error to prevent undefined issues
+      setTasks([])
     } finally {
       setIsLoading(false)
     }
@@ -148,19 +168,19 @@ export function TodoList() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'
-      case 'medium': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200'
-      case 'low': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-200'
+      case 'high': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200'
+      case 'medium': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+      case 'low': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+      default: return 'bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-200'
     }
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-      case 'in-progress': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'
-      case 'pending': return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-200'
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-200'
+      case 'completed': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+      case 'in-progress': return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200'
+      case 'pending': return 'bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-200'
+      default: return 'bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-200'
     }
   }
 
@@ -200,12 +220,12 @@ export function TodoList() {
             <CheckSquare className="w-3 h-3 mr-1" />
             {taskStats.total} Total
           </Badge>
-          <Badge variant="outline" className="px-3 py-1 bg-blue-50 text-blue-700 dark:bg-blue-900/30">
+          <Badge variant="outline" className="px-3 py-1 bg-sky-50 text-sky-700 dark:bg-sky-900/30">
             <Clock className="w-3 h-3 mr-1" />
             {taskStats.inProgress} In Progress
           </Badge>
           {taskStats.overdue > 0 && (
-            <Badge variant="outline" className="px-3 py-1 bg-red-50 text-red-700 dark:bg-red-900/30">
+            <Badge variant="outline" className="px-3 py-1 bg-rose-50 text-rose-700 dark:bg-rose-900/30">
               <AlertCircle className="w-3 h-3 mr-1" />
               {taskStats.overdue} Overdue
             </Badge>
@@ -321,11 +341,11 @@ export function TodoList() {
                         
                         {task.deadline && (
                           <div className={`flex items-center gap-1 ${
-                            isOverdue(task.deadline) ? 'text-red-600 dark:text-red-400' : ''
+                            isOverdue(task.deadline) ? 'text-rose-600 dark:text-rose-400' : ''
                           }`}>
                             <Calendar className="w-3 h-3" />
                             <span>{new Date(task.deadline).toLocaleDateString()}</span>
-                            {isOverdue(task.deadline) && <span className="text-red-600">(Overdue)</span>}
+                            {isOverdue(task.deadline) && <span className="text-rose-600">(Overdue)</span>}
                           </div>
                         )}
                         
@@ -387,5 +407,14 @@ export function TodoList() {
         )}
       </div>
     </div>
+  )
+}
+
+// Export wrapped component with error boundary
+export function TodoList() {
+  return (
+    <ErrorBoundary fallback={DashboardErrorFallback}>
+      <TodoListContent />
+    </ErrorBoundary>
   )
 }

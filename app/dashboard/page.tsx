@@ -15,6 +15,7 @@ import { ReportsPanel } from '@/components/dashboard/reports-panel'
 import { TodoList } from '@/components/dashboard/todo-list'
 import { TeamInbox } from '@/components/dashboard/team-inbox'
 import { Whiteboard } from '@/components/dashboard/whiteboard'
+import { AutomationCenter } from '@/components/dashboard/automation-center'
 
 import { IntegrationsPanel } from '@/components/dashboard/integrations-panel'
 import { ProfilePanel } from '@/components/dashboard/profile-panel'
@@ -92,6 +93,8 @@ export default function DashboardPage() {
         return <TeamInbox />
       case 'whiteboard':
         return <Whiteboard />
+      case 'automation':
+        return <AutomationCenter />
       case 'projects':
         return <ProjectsPanel />
       case 'calendar':

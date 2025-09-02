@@ -883,9 +883,9 @@ export function TaskBoard() {
                           </select>
                         ) : (
                           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            task.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                            task.status === 'in-progress' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                            'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                            task.status === 'completed' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200' :
+                            task.status === 'in-progress' ? 'bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-200' :
+                            'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-200'
                           }`}>
                             {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
                           </span>
@@ -904,9 +904,9 @@ export function TaskBoard() {
                           </select>
                         ) : (
                           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            task.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                            task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                            'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            task.priority === 'high' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-200' :
+                            task.priority === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200' :
+                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200'
                           }`}>
                             {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
                           </span>
@@ -1504,10 +1504,10 @@ function SortableTaskCard({
               {timeRemaining && (
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   timeRemaining.isCompleted
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
                     : timeRemaining.isOverdue
-                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                    : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                    ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
+                    : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
                 }`}>
                   {timeRemaining.text}
                 </span>
@@ -1596,9 +1596,9 @@ function SortableTaskCard({
             
             {/* Status Badge */}
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-              task.status === 'pending' ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' :
-              task.status === 'in-progress' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' :
-              'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+              task.status === 'pending' ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400' :
+              task.status === 'in-progress' ? 'bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400' :
+              'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
             }`}>
               {task.status === 'in-progress' ? 'In Progress' : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
             </span>

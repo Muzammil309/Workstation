@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User, ListTodo, MessageSquare, PenTool } from 'lucide-react'
+import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User, ListTodo, MessageSquare, PenTool, Bot } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
@@ -41,6 +41,12 @@ const navigationItems = [
     label: 'Whiteboard',
     icon: PenTool,
     description: 'Collaborative drawing & planning'
+  },
+  {
+    id: 'automation',
+    label: 'Automation',
+    icon: Bot,
+    description: 'Event management automation'
   },
   {
     id: 'projects',
@@ -148,9 +154,9 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
           isCollapsed ? "w-16" : "w-80"
         )}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex h-full flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex h-16 items-center justify-between border-b px-3">
+          <div className="flex h-16 items-center justify-between border-b px-3 flex-shrink-0">
             <div className="flex items-center space-x-2">
               <div className="flex items-center space-x-2">
                 <div className={cn(
@@ -188,7 +194,8 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 space-y-2 p-4">
+          <nav className="flex-1 overflow-y-auto overflow-x-hidden">
+            <div className="space-y-2 p-4">
             {filteredItems.map((item) => {
               const Icon = item.icon
               const isActive = activeTab === item.id
@@ -223,10 +230,11 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
                 </motion.button>
               )
             })}
+            </div>
           </nav>
 
           {/* Quick Actions */}
-          <div className="border-t p-4 space-y-2">
+          <div className="border-t p-4 space-y-2 flex-shrink-0">
             <Button 
               className={cn("w-full", isCollapsed ? "px-2" : "")} 
               variant="neon"
@@ -271,7 +279,7 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
           </div>
 
           {/* Footer */}
-          <div className="border-t p-4">
+          <div className="border-t p-4 flex-shrink-0">
             <div className={cn(
               "text-xs text-muted-foreground",
               isCollapsed ? "text-center" : "text-center"

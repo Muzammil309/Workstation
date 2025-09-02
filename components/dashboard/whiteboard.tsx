@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
+import { ErrorBoundary, DashboardErrorFallback, useErrorHandler } from '@/components/error-boundary'
 
 interface DrawingElement {
   id: string
@@ -49,9 +50,10 @@ interface TaskCreationData {
   assignee: string
 }
 
-export function Whiteboard() {
+function WhiteboardContent() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { handleError } = useErrorHandler()
 
   if (!user) {
     return (
@@ -84,9 +86,17 @@ export function Whiteboard() {
   ]
 
   useEffect(() => {
-    loadUsers()
-    loadWhiteboardData()
-  }, [])
+    const initializeWhiteboard = async () => {
+      try {
+        await Promise.all([loadUsers(), loadWhiteboardData()])
+      } catch (error) {
+        console.error('Failed to initialize whiteboard:', error)
+        handleError(error as Error)
+      }
+    }
+
+    initializeWhiteboard()
+  }, [handleError])
 
   const loadUsers = async () => {
     try {
@@ -129,13 +139,20 @@ export function Whiteboard() {
   }
 
   const redrawCanvas = (elementsToRender: DrawingElement[]) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    try {
+      const canvas = canvasRef.current
+      if (!canvas) {
+        console.warn('Canvas ref is null, skipping redraw')
+        return
+      }
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        console.warn('Canvas context is null, skipping redraw')
+        return
+      }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     elementsToRender.forEach(element => {
       ctx.strokeStyle = element.color
@@ -174,17 +191,25 @@ export function Whiteboard() {
           break
       }
     })
+    } catch (error) {
+      console.error('Error redrawing canvas:', error)
+      handleError(error as Error)
+    }
   }
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    try {
+      const canvas = canvasRef.current
+      if (!canvas) {
+        console.warn('Canvas ref is null in startDrawing')
+        return
+      }
 
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+      const rect = canvas.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
 
-    setIsDrawing(true)
+      setIsDrawing(true)
 
     if (currentTool === 'pen') {
       const newElement: DrawingElement = {
@@ -197,6 +222,10 @@ export function Whiteboard() {
         created_at: new Date().toISOString()
       }
       setElements(prev => [...prev, newElement])
+    }
+    } catch (error) {
+      console.error('Error in startDrawing:', error)
+      setIsDrawing(false)
     }
   }
 
@@ -513,5 +542,14 @@ export function Whiteboard() {
         </Card>
       )}
     </div>
+  )
+}
+
+// Export wrapped component with error boundary
+export function Whiteboard() {
+  return (
+    <ErrorBoundary fallback={DashboardErrorFallback}>
+      <WhiteboardContent />
+    </ErrorBoundary>
   )
 }
