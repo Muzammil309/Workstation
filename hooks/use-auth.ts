@@ -22,15 +22,15 @@ export function useAuth() {
       try {
         console.log('🔍 useAuth: Starting simplified auth check...')
         const { data: { session } } = await supabase.auth.getSession()
-        console.log('🔍 useAuth: Session result:', { 
-          hasSession: !!session, 
+        console.log('🔍 useAuth: Session result:', {
+          hasSession: !!session,
           userId: session?.user?.id,
-          email: session?.user?.email 
+          email: session?.user?.email
         })
-        
+
         if (session?.user) {
           console.log('🔍 useAuth: Session found, getting user from users table...')
-          
+
           // Try to get user from users table, but don't fail if it doesn't exist
           try {
             const { data: userData, error } = await supabase
@@ -38,9 +38,9 @@ export function useAuth() {
               .select('*')
               .eq('id', session.user.id)
               .single()
-              
+
             console.log('🔍 useAuth: Users table query result:', { userData, error })
-            
+
             if (userData) {
               const formattedUser: User = {
                 id: userData.id,
@@ -99,18 +99,14 @@ export function useAuth() {
       setIsLoading(false)
     }, 5000) // 5 second timeout
 
-    checkAuth()
-
-    return () => clearTimeout(timeoutId)
-    
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔍 useAuth: Auth state change event:', event, 'Session:', !!session)
-        
+
         if (event === 'SIGNED_IN' && session?.user) {
           console.log('🔍 useAuth: SIGNED_IN event detected')
-          
+
           // Create user immediately from session data
           const fallbackUser: User = {
             id: session.user.id,
@@ -120,11 +116,11 @@ export function useAuth() {
             lastName: '',
             role: 'admin'
           }
-          
+
           console.log('✅ useAuth: Setting user from SIGNED_IN event:', fallbackUser)
           setUser(fallbackUser)
           setIsLoading(false)
-          
+
         } else if (event === 'SIGNED_OUT') {
           console.log('🔍 useAuth: SIGNED_OUT event, clearing user')
           setUser(null)
@@ -133,7 +129,12 @@ export function useAuth() {
       }
     )
 
+    // Run initial auth check
+    checkAuth()
+
+    // Cleanup function
     return () => {
+      clearTimeout(timeoutId)
       subscription.unsubscribe()
     }
   }, [])
