@@ -225,8 +225,8 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
                       isActive ? "text-primary-foreground" : "text-muted-foreground"
                     )}
                     style={{
-                      width: isCollapsed ? '15px' : '20px',
-                      height: isCollapsed ? '15px' : '20px'
+                      width: isCollapsed ? '20px' : '20px',
+                      height: isCollapsed ? '20px' : '20px'
                     }}
                   />
                   {!isCollapsed && (
@@ -251,8 +251,8 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
             >
               <Plus
                 style={{
-                  width: isCollapsed ? '15px' : '16px',
-                  height: isCollapsed ? '15px' : '16px'
+                  width: isCollapsed ? '18px' : '16px',
+                  height: isCollapsed ? '18px' : '16px'
                 }}
               />
               {!isCollapsed && <span className="ml-2">{t('newTask')}</span>}
@@ -266,8 +266,8 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
             >
               <FolderOpen
                 style={{
-                  width: isCollapsed ? '15px' : '16px',
-                  height: isCollapsed ? '15px' : '16px'
+                  width: isCollapsed ? '18px' : '16px',
+                  height: isCollapsed ? '18px' : '16px'
                 }}
               />
               {!isCollapsed && <span className="ml-2">{t('newProject')}</span>}
@@ -281,8 +281,8 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
             >
               <Calendar
                 style={{
-                  width: isCollapsed ? '15px' : '16px',
-                  height: isCollapsed ? '15px' : '16px'
+                  width: isCollapsed ? '18px' : '16px',
+                  height: isCollapsed ? '18px' : '16px'
                 }}
               />
               {!isCollapsed && <span className="ml-2">Schedule Event</span>}

@@ -194,13 +194,22 @@ function AutomationCenterContent() {
 
   const toggleRuleStatus = async (ruleId: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from('automation_rules')
-        .update({ is_active: !isActive })
-        .eq('id', ruleId)
+      console.log('🔄 Toggling rule status:', ruleId, 'from', isActive, 'to', !isActive)
 
-      if (error) throw error
+      // Try to update in database, fallback to local state
+      try {
+        const { error } = await supabase
+          .from('automation_rules')
+          .update({ is_active: !isActive })
+          .eq('id', ruleId)
 
+        if (error) throw error
+        console.log('✅ Database update successful')
+      } catch (dbError) {
+        console.log('⚠️ Database update failed, updating local state:', dbError)
+      }
+
+      // Always update local state
       setAutomationRules(prev => prev.map(rule =>
         rule.id === ruleId ? { ...rule, is_active: !isActive } : rule
       ))
@@ -365,6 +374,8 @@ function AutomationCenterContent() {
 
   const deleteAutomationRule = async (ruleId: string) => {
     try {
+      console.log('🗑️ Deleting automation rule:', ruleId)
+
       // Try to delete from database, fallback to local state
       try {
         const { error } = await supabase
@@ -373,21 +384,78 @@ function AutomationCenterContent() {
           .eq('id', ruleId)
 
         if (error) throw error
+        console.log('✅ Database delete successful')
       } catch (dbError) {
-        console.log('Database delete failed, removing from local state:', dbError)
+        console.log('⚠️ Database delete failed, removing from local state:', dbError)
       }
 
-      setAutomationRules(prev => prev.filter(rule => rule.id !== ruleId))
+      // Always update local state
+      setAutomationRules(prev => {
+        const filtered = prev.filter(rule => rule.id !== ruleId)
+        console.log('📊 Rules after deletion:', filtered.length)
+        return filtered
+      })
 
       toast({
         title: "Success",
         description: "Automation rule deleted successfully",
       })
     } catch (error: any) {
-      console.error('Error deleting rule:', error)
+      console.error('❌ Error deleting rule:', error)
       toast({
         title: "Error",
         description: "Failed to delete automation rule",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const addPredefinedRule = async (predefinedRule: any) => {
+    try {
+      const newRule = {
+        name: predefinedRule.name,
+        description: predefinedRule.description,
+        trigger_type: predefinedRule.trigger_type as any,
+        trigger_conditions: {},
+        actions: predefinedRule.actions.map((action: string) => ({
+          type: action as any,
+          parameters: {}
+        })),
+        is_active: true,
+        created_by: user?.id || '',
+        execution_count: 0
+      }
+
+      // Try to save to database, fallback to local state
+      try {
+        const { data, error } = await supabase
+          .from('automation_rules')
+          .insert([newRule])
+          .select()
+          .single()
+
+        if (error) throw error
+
+        setAutomationRules(prev => [data, ...prev])
+      } catch (dbError) {
+        console.log('Database save failed, adding to local state:', dbError)
+        const localRule: AutomationRule = {
+          ...newRule,
+          id: `local-${Date.now()}`,
+          created_at: new Date().toISOString()
+        }
+        setAutomationRules(prev => [localRule, ...prev])
+      }
+
+      toast({
+        title: "Success",
+        description: `"${predefinedRule.name}" rule added successfully`,
+      })
+    } catch (error: any) {
+      console.error('Error adding predefined rule:', error)
+      toast({
+        title: "Error",
+        description: "Failed to add automation rule",
         variant: "destructive"
       })
     }
@@ -534,7 +602,12 @@ function AutomationCenterContent() {
                   <div key={index} className="p-4 border rounded-lg hover:shadow-sm transition-shadow">
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-medium text-emphasis">{rule.name}</h3>
-                      <Button size="sm" variant="outline">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => addPredefinedRule(rule)}
+                        title="Add this rule to your automation"
+                      >
                         <Plus className="w-3 h-3 mr-1" />
                         Add
                       </Button>

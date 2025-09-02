@@ -75,7 +75,14 @@ function TodoListContent() {
       console.log('🔍 Loading comprehensive tasks for user:', user.id, 'with email:', user.email)
 
       // Run multiple queries in parallel to get ALL tasks user should see
-      const [assignedTasksResult, createdTasksResult, containsTasksResult, emailAssignedResult] = await Promise.allSettled([
+      const [
+        assignedTasksResult,
+        createdTasksResult,
+        containsTasksResult,
+        emailAssignedResult,
+        collaborativeTasksResult,
+        teamTasksResult
+      ] = await Promise.allSettled([
         // Query 1: Tasks where user is in assignees array (using overlaps - most reliable)
         supabase
           .from('tasks')
@@ -102,6 +109,20 @@ function TodoListContent() {
           .from('tasks')
           .select('*')
           .or(`assignees.cs.{${user.id}},assignees.cs.{${user.email}}`)
+          .order('created_at', { ascending: false }),
+
+        // Query 5: Multi-assignee collaborative tasks (where assignees array has multiple entries and includes user)
+        supabase
+          .from('tasks')
+          .select('*')
+          .filter('assignees', 'cs', `{${user.id}}`)
+          .order('created_at', { ascending: false }),
+
+        // Query 6: Team-based tasks (using different possible team assignment patterns)
+        supabase
+          .from('tasks')
+          .select('*')
+          .or(`assignees.cs.{${user.email}},assigned_to.eq.${user.id},assigned_to.eq.${user.email}`)
           .order('created_at', { ascending: false })
       ])
 
@@ -144,6 +165,24 @@ function TodoListContent() {
         console.log('🔍 Email assigned tasks query failed:', emailAssignedResult.status === 'fulfilled' ? emailAssignedResult.value.error : emailAssignedResult.reason)
       }
 
+      // Process collaborative tasks (multi-assignee)
+      if (collaborativeTasksResult.status === 'fulfilled' && !collaborativeTasksResult.value.error) {
+        const collaborativeTasks = collaborativeTasksResult.value.data || []
+        allTasks.push(...collaborativeTasks)
+        console.log('🔍 Found', collaborativeTasks.length, 'collaborative multi-assignee tasks')
+      } else {
+        console.log('🔍 Collaborative tasks query failed:', collaborativeTasksResult.status === 'fulfilled' ? collaborativeTasksResult.value.error : collaborativeTasksResult.reason)
+      }
+
+      // Process team tasks (alternative team assignment patterns)
+      if (teamTasksResult.status === 'fulfilled' && !teamTasksResult.value.error) {
+        const teamTasks = teamTasksResult.value.data || []
+        allTasks.push(...teamTasks)
+        console.log('🔍 Found', teamTasks.length, 'team-based tasks')
+      } else {
+        console.log('🔍 Team tasks query failed:', teamTasksResult.status === 'fulfilled' ? teamTasksResult.value.error : teamTasksResult.reason)
+      }
+
       // Remove duplicates by task ID
       const uniqueTasks = allTasks.filter((task, index, self) =>
         index === self.findIndex(t => t.id === task.id)
@@ -154,6 +193,24 @@ function TodoListContent() {
 
       console.log('🔍 Total unique tasks loaded:', uniqueTasks.length)
       console.log('🔍 Task IDs:', uniqueTasks.map(t => t.id))
+
+      // Detailed task analysis for debugging
+      console.log('📊 Task Analysis:')
+      console.log('  - Individual assignments:', uniqueTasks.filter(t => Array.isArray(t.assignees) && t.assignees.length === 1 && t.assignees.includes(user.id)).length)
+      console.log('  - Multi-assignee tasks:', uniqueTasks.filter(t => Array.isArray(t.assignees) && t.assignees.length > 1 && t.assignees.includes(user.id)).length)
+      console.log('  - Created by user:', uniqueTasks.filter(t => t.created_by === user.id).length)
+      console.log('  - Team collaboration:', uniqueTasks.filter(t => Array.isArray(t.assignees) && t.assignees.length > 1).length)
+
+      // Log sample task structures for debugging
+      if (uniqueTasks.length > 0) {
+        console.log('📝 Sample task structure:', {
+          id: uniqueTasks[0].id,
+          title: uniqueTasks[0].title,
+          assignees: uniqueTasks[0].assignees,
+          created_by: uniqueTasks[0].created_by,
+          status: uniqueTasks[0].status
+        })
+      }
 
       setTasks(uniqueTasks)
     } catch (error: any) {
