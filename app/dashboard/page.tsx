@@ -87,11 +87,19 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       console.log('🤖 Initializing automation engine for user:', user.id)
-      automationEngine.start()
+      try {
+        automationEngine.start()
+      } catch (error) {
+        console.error('Failed to start automation engine:', error)
+      }
 
       return () => {
         console.log('🤖 Stopping automation engine')
-        automationEngine.stop()
+        try {
+          automationEngine.stop()
+        } catch (error) {
+          console.error('Failed to stop automation engine:', error)
+        }
       }
     }
   }, [user])

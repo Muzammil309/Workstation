@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { notificationService, Notification, NotificationEvent } from './notification-service'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -33,11 +33,22 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const [soundEnabled, setSoundEnabledState] = useState(true)
   const { user } = useAuth()
 
+  const loadNotifications = useCallback(async () => {
+    if (!user?.id) return
+
+    try {
+      const loadedNotifications = await notificationService.loadNotifications(user.id)
+      setNotifications(loadedNotifications)
+    } catch (error) {
+      console.error('Failed to load notifications:', error)
+    }
+  }, [user?.id])
+
   // Load initial notifications
   useEffect(() => {
     if (user?.id) {
       loadNotifications()
-      
+
       // Subscribe to real-time notifications
       const unsubscribe = notificationService.subscribeToNotifications(
         user.id,
@@ -48,18 +59,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
       return unsubscribe
     }
-  }, [user?.id])
-
-  const loadNotifications = async () => {
-    if (!user?.id) return
-    
-    try {
-      const loadedNotifications = await notificationService.loadNotifications(user.id)
-      setNotifications(loadedNotifications)
-    } catch (error) {
-      console.error('Failed to load notifications:', error)
-    }
-  }
+  }, [user?.id, loadNotifications])
 
   const addNotification = async (event: NotificationEvent) => {
     if (!user?.id) return

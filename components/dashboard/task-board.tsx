@@ -214,25 +214,29 @@ export function TaskBoard() {
 
       // Trigger notifications for assigned users
       if (data.assignees && data.assignees.length > 0) {
-        console.log('🔔 Triggering notifications for assigned users:', data.assignees)
-        const assignedUsers = await getUsersByIds(data.assignees)
+        try {
+          console.log('🔔 Triggering notifications for assigned users:', data.assignees)
+          const assignedUsers = await getUsersByIds(data.assignees)
 
-        for (const assignedUser of assignedUsers) {
-          if (assignedUser.id !== user?.id) {
-            console.log('📨 Sending notification to user:', assignedUser.id, assignedUser.name)
+          for (const assignedUser of assignedUsers) {
+            if (assignedUser.id !== user?.id) {
+              console.log('📨 Sending notification to user:', assignedUser.id, assignedUser.name)
 
-            // Create notification for the assigned user
-            try {
-              await notificationService.notifyTaskAssigned(
-                assignedUser.id,
-                data.title,
-                user?.name || user?.email || 'Admin'
-              )
-              console.log('✅ Notification sent successfully to:', assignedUser.name)
-            } catch (error) {
-              console.error('❌ Failed to send notification to:', assignedUser.name, error)
+              // Create notification for the assigned user
+              try {
+                await notificationService.notifyTaskAssigned(
+                  assignedUser.id,
+                  data.title,
+                  user?.name || user?.email || 'Admin'
+                )
+                console.log('✅ Notification sent successfully to:', assignedUser.name)
+              } catch (error) {
+                console.error('❌ Failed to send notification to:', assignedUser.name, error)
+              }
             }
           }
+        } catch (error) {
+          console.error('❌ Failed to process task assignment notifications:', error)
         }
       }
 

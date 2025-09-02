@@ -118,16 +118,20 @@ function TeamInboxContent() {
             })
 
             // Trigger notification through our notification system
-            notifyMessageReceived(
-              newMessage.sender_name,
-              newMessage.content.substring(0, 50) + (newMessage.content.length > 50 ? '...' : '')
-            )
+            try {
+              notifyMessageReceived(
+                newMessage.sender_name,
+                newMessage.content.substring(0, 50) + (newMessage.content.length > 50 ? '...' : '')
+              )
 
-            // Also show legacy notification
-            showNotification(
-              `New message from ${newMessage.sender_name}`,
-              newMessage.content.substring(0, 100) + (newMessage.content.length > 100 ? '...' : '')
-            )
+              // Also show legacy notification
+              showNotification(
+                `New message from ${newMessage.sender_name}`,
+                newMessage.content.substring(0, 100) + (newMessage.content.length > 100 ? '...' : '')
+              )
+            } catch (error) {
+              console.error('Failed to trigger message notification:', error)
+            }
           }
         }
       )
@@ -155,7 +159,7 @@ function TeamInboxContent() {
       console.log('🔌 Unsubscribing from team messages')
       supabase.removeChannel(subscription)
     }
-  }, [user?.id, notifyMessageReceived])
+  }, [user?.id])
 
   useEffect(() => {
     scrollToBottom()
@@ -178,12 +182,13 @@ function TeamInboxContent() {
   // Cleanup: Save messages on unmount
   useEffect(() => {
     return () => {
-      if (messages.length > 0) {
-        localStorage.setItem('team_messages', JSON.stringify(messages))
-        console.log('🔄 Saved messages on component unmount')
+      // Use a ref to get the latest messages value
+      const currentMessages = JSON.parse(localStorage.getItem('team_messages') || '[]')
+      if (currentMessages.length > 0) {
+        console.log('🔄 Messages already cached on unmount')
       }
     }
-  }, [messages])
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
