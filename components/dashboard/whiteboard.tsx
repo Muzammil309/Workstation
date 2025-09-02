@@ -2,16 +2,16 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  PenTool, 
-  Square, 
-  Circle, 
-  Type, 
-  Eraser, 
-  Download, 
-  Upload, 
-  Trash2, 
-  Undo, 
+import {
+  PenTool,
+  Square,
+  Circle,
+  Type,
+  Eraser,
+  Download,
+  Upload,
+  Trash2,
+  Undo,
   Redo,
   Camera,
   Plus,
@@ -55,6 +55,8 @@ interface TaskCreationData {
 function WhiteboardContent() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { users: cachedUsers } = useUsers()
+
   const { notifyTaskAssigned } = useNotificationTriggers()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -110,8 +112,7 @@ function WhiteboardContent() {
   const loadUsers = async () => {
     try {
       // Use shared cached users to avoid extra network calls during init
-      const { users: cached } = useUsers()
-      setUsers(cached || [])
+      setUsers(cachedUsers || [])
     } catch (error: any) {
       console.error('Error loading users:', error)
     }
@@ -508,7 +509,7 @@ function WhiteboardContent() {
           <h1 className="text-3xl font-bold text-emphasis">Collaborative Whiteboard</h1>
           <p className="text-subtle mt-1">Draw, plan, and create tasks together</p>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           {isCollaborating && (
             <Badge variant="default" className="px-3 py-1 bg-green-500 text-white animate-pulse">
@@ -645,7 +646,7 @@ function WhiteboardContent() {
                 placeholder="Enter task title..."
               />
             </div>
-            
+
             <div>
               <label className="text-sm font-medium">Description</label>
               <Textarea
@@ -655,7 +656,7 @@ function WhiteboardContent() {
                 rows={3}
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium">Priority</label>
@@ -669,7 +670,7 @@ function WhiteboardContent() {
                   <option value="high">High</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="text-sm font-medium">Assign to</label>
                 <select
@@ -684,7 +685,7 @@ function WhiteboardContent() {
                 </select>
               </div>
             </div>
-            
+
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={() => setShowTaskCreation(false)}>
                 Cancel

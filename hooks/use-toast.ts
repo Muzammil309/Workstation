@@ -198,15 +198,19 @@ function useToast(userPreferences?: any) {
     }
   }, [])
 
-  // Create a toast function that includes user preferences
-  const toastWithPreferences = (props: Toast) => {
+  // Create a stable toast function that includes user preferences
+  const toastWithPreferences = React.useCallback((props: Toast) => {
     return toast({ ...props, userPreferences })
-  }
+  }, [userPreferences])
+
+  const dismissStable = React.useCallback((toastId?: string) => {
+    dispatch({ type: "DISMISS_TOAST", toastId })
+  }, [])
 
   return {
     ...state,
     toast: toastWithPreferences,
-    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+    dismiss: dismissStable,
   }
 }
 

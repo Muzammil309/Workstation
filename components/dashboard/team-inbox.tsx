@@ -38,6 +38,8 @@ interface User {
 
 function TeamInboxContent() {
   const { user } = useAuth()
+  const { users: cachedUsers } = useUsers()
+
   const { toast } = useToast()
   const { notifyMessageReceived } = useNotificationTriggers()
   const { setUnreadMessageCount, incrementUnreadCount, resetUnreadCount } = useInbox()
@@ -270,9 +272,8 @@ function TeamInboxContent() {
   const loadUsers = async () => {
     try {
       // Use shared cache via useUsers to avoid duplicate queries
-      const { users: cached } = useUsers()
       // Exclude current user and coerce to local type shape
-      const filtered = (cached || [])
+      const filtered = (cachedUsers || [])
         .filter(u => u.id !== user?.id)
         .map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role || 'user' }))
       setUsers(filtered)
@@ -473,7 +474,7 @@ function TeamInboxContent() {
 
       setMessages(prev => prev.map(msg => ({ ...msg, is_read: true })))
       setUnreadCount(0)
-      
+
       toast({
         title: "All messages marked as read",
         description: "All messages have been marked as read",
@@ -665,7 +666,7 @@ function TeamInboxContent() {
                       {getUserInitials(message.sender_name)}
                     </AvatarFallback>
                   </Avatar>
-                  
+
                   <div className={`flex-1 max-w-xs lg:max-w-md ${
                     message.sender_id === user.id ? 'text-right' : ''
                   }`}>
@@ -680,7 +681,7 @@ function TeamInboxContent() {
                         <div className="w-2 h-2 bg-primary rounded-full"></div>
                       )}
                     </div>
-                    
+
                     <div
                       className={`p-3 rounded-lg ${
                         message.sender_id === user?.id

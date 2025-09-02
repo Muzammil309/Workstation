@@ -44,6 +44,8 @@ interface TaskStats {
 }
 
 export function AnalyticsDashboard() {
+  const { users: cachedUsers } = useUsers()
+
   const { user } = useAuth()
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -73,9 +75,6 @@ export function AnalyticsDashboard() {
         .order('created_at', { ascending: false })
 
       if (tasksError) throw tasksError
-
-      // Fetch users via shared cache to avoid extra network calls
-      const { users: cachedUsers } = useUsers()
 
       setTasks(tasksData || [])
       setUsers((cachedUsers || []).map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role || 'user', department: u.department || '' })))
