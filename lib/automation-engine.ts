@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { showNotification } from './notifications'
+import { notificationService } from './notification-service'
 
 export interface AutomationRule {
   id: string
@@ -350,12 +351,63 @@ export class AutomationEngine {
   private async sendNotification(parameters: any, context: AutomationContext) {
     const message = parameters.message || 'Automation notification'
     const recipients = parameters.recipients || 'assignees'
-    
-    // Show browser notification
-    showNotification('Automation Alert', message)
-    
-    // Could also send email, Slack, etc. here
-    return { message, recipients, sent_at: new Date().toISOString() }
+    const task = context.trigger_data.task
+
+    console.log('🔔 Automation sending notification:', { message, recipients, task: task?.title })
+
+    try {
+      // Determine who should receive the notification
+      let userIds: string[] = []
+
+      if (recipients === 'assignees' && task?.assignees) {
+        userIds = Array.isArray(task.assignees) ? task.assignees : [task.assignees]
+      } else if (recipients === 'creator' && task?.created_by) {
+        userIds = [task.created_by]
+      } else if (recipients === 'team_leads') {
+        // Get team leads
+        const { data: teamLeads } = await supabase
+          .from('users')
+          .select('id')
+          .eq('role', 'team_lead')
+        userIds = teamLeads?.map(u => u.id) || []
+      } else if (Array.isArray(recipients)) {
+        userIds = recipients
+      }
+
+      // Send notification to each recipient
+      for (const userId of userIds) {
+        if (context.trigger_data.days_until_deadline !== undefined) {
+          // This is a deadline reminder
+          await notificationService.notifyDeadlineApproaching(
+            userId,
+            task?.title || 'Task',
+            context.trigger_data.days_until_deadline * 24 // Convert days to hours
+          )
+        } else {
+          // Generic automation notification
+          await notificationService.createNotification({
+            type: 'system_alert',
+            userId,
+            title: 'Automation Alert',
+            message,
+            priority: 'medium',
+            actionUrl: '/dashboard?tab=tasks'
+          })
+        }
+      }
+
+      // Also show browser notification for immediate feedback
+      showNotification('Automation Alert', message)
+
+      console.log('✅ Automation notifications sent to', userIds.length, 'users')
+      return { message, recipients: userIds, sent_at: new Date().toISOString() }
+
+    } catch (error: any) {
+      console.error('❌ Failed to send automation notification:', error)
+      // Fallback to browser notification only
+      showNotification('Automation Alert', message)
+      return { message, recipients: 'fallback', error: error?.message || 'Unknown error', sent_at: new Date().toISOString() }
+    }
   }
 
   private async assignTeam(parameters: any, context: AutomationContext) {

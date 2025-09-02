@@ -30,6 +30,7 @@ interface Task {
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
 import { useNotificationTriggers } from '@/lib/notification-context'
+import { notificationService } from '@/lib/notification-service'
 import { CreateTaskModal } from './create-task-modal'
 import { TaskPreviewModal } from './task-preview-modal'
 import {
@@ -213,10 +214,24 @@ export function TaskBoard() {
 
       // Trigger notifications for assigned users
       if (data.assignees && data.assignees.length > 0) {
+        console.log('🔔 Triggering notifications for assigned users:', data.assignees)
         const assignedUsers = await getUsersByIds(data.assignees)
+
         for (const assignedUser of assignedUsers) {
-          if (assignedUser.id !== user.id) {
-            await notifyTaskAssigned(data.title, user.name || user.email || 'Someone')
+          if (assignedUser.id !== user?.id) {
+            console.log('📨 Sending notification to user:', assignedUser.id, assignedUser.name)
+
+            // Create notification for the assigned user
+            try {
+              await notificationService.notifyTaskAssigned(
+                assignedUser.id,
+                data.title,
+                user?.name || user?.email || 'Admin'
+              )
+              console.log('✅ Notification sent successfully to:', assignedUser.name)
+            } catch (error) {
+              console.error('❌ Failed to send notification to:', assignedUser.name, error)
+            }
           }
         }
       }

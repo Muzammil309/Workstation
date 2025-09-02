@@ -48,6 +48,9 @@ function TeamInboxContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isConnected, setIsConnected] = useState(false)
+  const [chatMode, setChatMode] = useState<'team' | 'individual'>('team')
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [individualMessages, setIndividualMessages] = useState<Record<string, Message[]>>({})
 
   // ✅ Load messages from cache immediately on mount
   useEffect(() => {
@@ -56,9 +59,21 @@ function TeamInboxContent() {
       try {
         const parsed = JSON.parse(cachedMessages)
         setMessages(parsed)
-        console.log('🚀 Loaded', parsed.length, 'messages from cache on mount')
+        console.log('🚀 Loaded', parsed.length, 'team messages from cache on mount')
       } catch (error) {
-        console.error('Failed to parse cached messages:', error)
+        console.error('Failed to parse cached team messages:', error)
+      }
+    }
+
+    // Load individual chat cache
+    const cachedIndividualChats = localStorage.getItem('individual_messages')
+    if (cachedIndividualChats) {
+      try {
+        const parsed = JSON.parse(cachedIndividualChats)
+        setIndividualMessages(parsed)
+        console.log('🚀 Loaded individual chats from cache on mount')
+      } catch (error) {
+        console.error('Failed to parse cached individual messages:', error)
       }
     }
   }, [])
@@ -240,6 +255,7 @@ function TeamInboxContent() {
       const { data, error } = await supabase
         .from('users')
         .select('id, name, email, role')
+        .neq('id', user?.id) // Exclude current user
 
       if (error) throw error
       setUsers(data || [])
@@ -248,10 +264,99 @@ function TeamInboxContent() {
     }
   }
 
+  const loadIndividualMessages = async (otherUserId: string) => {
+    try {
+      console.log('📥 Loading individual messages with user:', otherUserId)
+
+      const { data, error } = await supabase
+        .from('individual_messages')
+        .select('*')
+        .or(`and(sender_id.eq.${user?.id},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${user?.id})`)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        console.log('⚠️ Database query failed for individual messages:', error)
+        // Try to load from localStorage as fallback
+        const cachedKey = `individual_messages_${otherUserId}`
+        const cachedMessages = localStorage.getItem(cachedKey)
+        if (cachedMessages) {
+          const parsed = JSON.parse(cachedMessages)
+          setIndividualMessages(prev => ({ ...prev, [otherUserId]: parsed }))
+          console.log('📦 Loaded', parsed.length, 'individual messages from cache')
+        }
+        return
+      }
+
+      const messagesData = data || []
+      setIndividualMessages(prev => ({ ...prev, [otherUserId]: messagesData }))
+
+      // Cache individual messages
+      const cachedKey = `individual_messages_${otherUserId}`
+      localStorage.setItem(cachedKey, JSON.stringify(messagesData))
+      localStorage.setItem('individual_messages', JSON.stringify({ ...individualMessages, [otherUserId]: messagesData }))
+
+      console.log('📥 Loaded', messagesData.length, 'individual messages from database')
+    } catch (error: any) {
+      console.error('Error loading individual messages:', error)
+    }
+  }
+
+  const sendIndividualMessage = async () => {
+    if (!newMessage.trim() || !selectedUser) return
+
+    console.log('📤 Attempting to send individual message to:', selectedUser.name)
+
+    try {
+      const messageData = {
+        content: newMessage.trim(),
+        sender_id: user?.id,
+        sender_name: user?.name || user?.email || 'Unknown',
+        recipient_id: selectedUser.id,
+        recipient_name: selectedUser.name,
+        created_at: new Date().toISOString()
+      }
+
+      const { data, error } = await supabase
+        .from('individual_messages')
+        .insert([messageData])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Update local state
+      setIndividualMessages(prev => ({
+        ...prev,
+        [selectedUser.id]: [...(prev[selectedUser.id] || []), data]
+      }))
+
+      // Cache the updated messages
+      const updatedMessages = [...(individualMessages[selectedUser.id] || []), data]
+      const cachedKey = `individual_messages_${selectedUser.id}`
+      localStorage.setItem(cachedKey, JSON.stringify(updatedMessages))
+      localStorage.setItem('individual_messages', JSON.stringify({ ...individualMessages, [selectedUser.id]: updatedMessages }))
+
+      setNewMessage('')
+      console.log('✅ Individual message sent successfully')
+
+    } catch (error: any) {
+      console.error('❌ Error sending individual message:', error)
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive"
+      })
+    }
+  }
+
   const sendMessage = async () => {
+    if (chatMode === 'individual') {
+      return sendIndividualMessage()
+    }
+
     if (!newMessage.trim()) return
 
-    console.log('📤 Attempting to send message:', newMessage.trim())
+    console.log('📤 Attempting to send team message:', newMessage.trim())
 
     try {
       const messageData = {
@@ -361,7 +466,14 @@ function TeamInboxContent() {
     }
   }
 
-  const filteredMessages = messages.filter(message =>
+  const getCurrentMessages = () => {
+    if (chatMode === 'individual' && selectedUser) {
+      return individualMessages[selectedUser.id] || []
+    }
+    return messages
+  }
+
+  const filteredMessages = getCurrentMessages().filter(message =>
     message.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
     message.sender_name.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -416,18 +528,45 @@ function TeamInboxContent() {
         <div className="flex items-center space-x-3">
           <MessageSquare className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold text-emphasis">Team Inbox</h1>
-            <p className="text-subtle">Real-time team communication</p>
+            <h1 className="text-2xl font-bold text-emphasis">
+              {chatMode === 'team' ? 'Team Inbox' : selectedUser ? `Chat with ${selectedUser.name}` : 'Individual Chat'}
+            </h1>
+            <p className="text-subtle">
+              {chatMode === 'team' ? 'Real-time team communication' : 'Private conversation'}
+            </p>
           </div>
         </div>
-        
+
         <div className="flex items-center space-x-2">
+          {/* Chat Mode Toggle */}
+          <div className="flex items-center space-x-1 bg-muted rounded-lg p-1">
+            <Button
+              variant={chatMode === 'team' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => {
+                setChatMode('team')
+                setSelectedUser(null)
+              }}
+              className="text-xs"
+            >
+              Team Chat
+            </Button>
+            <Button
+              variant={chatMode === 'individual' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setChatMode('individual')}
+              className="text-xs"
+            >
+              Individual Chat
+            </Button>
+          </div>
+
           {unreadCount > 0 && (
             <Badge variant="destructive" className="px-2 py-1">
               {unreadCount} unread
             </Badge>
           )}
-          
+
           <Button
             variant="outline"
             size="sm"
@@ -439,6 +578,39 @@ function TeamInboxContent() {
           </Button>
         </div>
       </div>
+
+      {/* User Selection for Individual Chat */}
+      {chatMode === 'individual' && (
+        <Card className="surface-3">
+          <CardContent className="p-3">
+            <div className="flex items-center space-x-2 mb-3">
+              <Users className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Select a team member to chat with:</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              {users.map((user) => (
+                <Button
+                  key={user.id}
+                  variant={selectedUser?.id === user.id ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setSelectedUser(user)
+                    loadIndividualMessages(user.id)
+                  }}
+                  className="justify-start text-left"
+                >
+                  <div className="flex items-center space-x-2">
+                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
+                      {getUserInitials(user.name)}
+                    </div>
+                    <span className="truncate">{user.name}</span>
+                  </div>
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search */}
       <Card className="surface-3">
@@ -515,35 +687,48 @@ function TeamInboxContent() {
 
           {/* Message Input */}
           <div className="border-t p-4">
-            <div className="flex items-end space-x-2">
-              <div className="flex-1">
-                <Textarea
-                  placeholder="Type your message..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      sendMessage()
-                    }
-                  }}
-                  className="min-h-[60px] resize-none"
-                />
+            {chatMode === 'individual' && !selectedUser ? (
+              <div className="text-center text-muted-foreground py-4">
+                <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>Select a team member to start chatting</p>
               </div>
-              
-              <Button
-                onClick={sendMessage}
-                disabled={!newMessage.trim()}
-                className="px-4 py-2"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-            
-            <div className="flex items-center justify-between mt-2 text-xs text-subtle">
-              <span>Press Enter to send, Shift+Enter for new line</span>
-              <span>{users.length} team members online</span>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-end space-x-2">
+                  <div className="flex-1">
+                    <Textarea
+                      placeholder={
+                        chatMode === 'individual' && selectedUser
+                          ? `Message ${selectedUser.name}...`
+                          : "Type your team message..."
+                      }
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          sendMessage()
+                        }
+                      }}
+                      className="min-h-[60px] resize-none"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={sendMessage}
+                    disabled={!newMessage.trim() || (chatMode === 'individual' && !selectedUser)}
+                    className="px-4 py-2"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between mt-2 text-xs text-subtle">
+                  <span>Press Enter to send, Shift+Enter for new line</span>
+                  <span>{users.length} team members online</span>
+                </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>

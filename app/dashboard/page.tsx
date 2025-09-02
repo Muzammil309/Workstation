@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
@@ -24,6 +24,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { LanguageProvider } from '@/lib/language-context'
 import { NotificationProvider } from '@/lib/notification-context'
 import { InboxProvider } from '@/lib/inbox-context'
+import { automationEngine } from '@/lib/automation-engine'
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('tasks')
@@ -81,6 +82,19 @@ export default function DashboardPage() {
   }
 
   console.log('🔍 DashboardPage: User authenticated, rendering dashboard')
+
+  // Initialize automation engine
+  useEffect(() => {
+    if (user) {
+      console.log('🤖 Initializing automation engine for user:', user.id)
+      automationEngine.start()
+
+      return () => {
+        console.log('🤖 Stopping automation engine')
+        automationEngine.stop()
+      }
+    }
+  }, [user])
 
   const renderContent = () => {
     switch (activeTab) {

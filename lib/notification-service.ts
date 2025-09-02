@@ -86,15 +86,27 @@ class NotificationService {
 
     // Try to save to database
     try {
-      const { error } = await supabase
+      console.log('💾 Saving notification to database:', notification)
+
+      const { data, error } = await supabase
         .from('notifications')
         .insert([notification])
+        .select()
+        .single()
 
       if (error) {
-        console.log('Failed to save notification to database:', error)
+        console.error('❌ Failed to save notification to database:', error)
+        // Continue with local notification even if database fails
+      } else {
+        console.log('✅ Notification saved to database successfully:', data)
+        // Update notification with database ID if available
+        if (data) {
+          notification.id = data.id
+        }
       }
     } catch (dbError) {
-      console.log('Database not available, notification will be local only:', dbError)
+      console.error('❌ Database error while saving notification:', dbError)
+      // Continue with local notification even if database fails
     }
 
     // Play sound
@@ -211,14 +223,19 @@ class NotificationService {
 
   // Trigger specific notification events
   async notifyTaskAssigned(userId: string, taskTitle: string, assignedBy: string) {
-    return this.createNotification({
+    console.log('🔔 Creating task assignment notification for user:', userId)
+
+    const notification = await this.createNotification({
       type: 'task_assigned',
       userId,
-      title: 'Task Assigned',
+      title: 'New Task Assignment',
       message: `You have been assigned to "${taskTitle}" by ${assignedBy}`,
-      priority: 'medium',
+      priority: 'high',
       actionUrl: '/dashboard?tab=tasks'
     })
+
+    console.log('✅ Task assignment notification created:', notification)
+    return notification
   }
 
   async notifyDeadlineApproaching(userId: string, taskTitle: string, hoursLeft: number) {
