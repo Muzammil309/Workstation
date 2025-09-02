@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User, ListTodo, MessageSquare, PenTool, Bot, Bug } from 'lucide-react'
+import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User, ListTodo, MessageSquare, PenTool, Bot } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
@@ -47,12 +47,6 @@ const navigationItems = [
     label: 'Automation',
     icon: Bot,
     description: 'Event management automation'
-  },
-  {
-    id: 'debug',
-    label: 'Debug',
-    icon: Bug,
-    description: 'Component testing & debugging'
   },
   {
     id: 'projects',
@@ -226,7 +220,10 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
                   whileTap={{ scale: 0.98 }}
                   title={isCollapsed ? item.label : undefined}
                 >
-                  <Icon className={cn("h-5 w-5", isActive ? "text-primary-foreground" : "text-muted-foreground")} />
+                  <Icon className={cn(
+                    isCollapsed ? "h-6 w-6" : "h-5 w-5",
+                    isActive ? "text-primary-foreground" : "text-muted-foreground"
+                  )} />
                   {!isCollapsed && (
                     <div className="flex-1">
                       <div className="font-medium">{item.label}</div>
@@ -247,7 +244,7 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
               title={isCollapsed ? t('newTask') : undefined}
               onClick={handleNewTask}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className={cn(isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
               {!isCollapsed && <span className="ml-2">{t('newTask')}</span>}
             </Button>
             
@@ -257,17 +254,17 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
               title={isCollapsed ? t('newProject') : undefined}
               onClick={handleNewProject}
             >
-              <FolderOpen className="h-4 w-4" />
+              <FolderOpen className={cn(isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
               {!isCollapsed && <span className="ml-2">{t('newProject')}</span>}
             </Button>
-            
-            <Button 
-              className={cn("w-full", isCollapsed ? "px-2" : "")} 
+
+            <Button
+              className={cn("w-full", isCollapsed ? "px-2" : "")}
               variant="outline"
               title={isCollapsed ? "Schedule Event" : undefined}
               onClick={handleScheduleEvent}
             >
-              <Calendar className="h-4 w-4" />
+              <Calendar className={cn(isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
               {!isCollapsed && <span className="ml-2">Schedule Event</span>}
             </Button>
             

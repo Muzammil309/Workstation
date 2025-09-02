@@ -72,13 +72,55 @@ function TodoListContent() {
         throw new Error('User ID is required to load tasks')
       }
 
-      const { data, error } = await supabase
+      console.log('🔍 Loading tasks for user:', user.id)
+
+      // Try multiple query approaches to ensure we get user tasks
+      let data, error
+
+      // First try: Use overlaps for array field
+      const overlapsResult = await supabase
         .from('tasks')
         .select('*')
-        .contains('assignees', [user.id])
+        .overlaps('assignees', [user.id])
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (overlapsResult.error) {
+        console.log('🔍 Overlaps query failed, trying contains:', overlapsResult.error)
+
+        // Second try: Use contains for array field
+        const containsResult = await supabase
+          .from('tasks')
+          .select('*')
+          .contains('assignees', [user.id])
+          .order('created_at', { ascending: false })
+
+        if (containsResult.error) {
+          console.log('🔍 Contains query failed, trying created_by:', containsResult.error)
+
+          // Third try: Get tasks created by user
+          const createdByResult = await supabase
+            .from('tasks')
+            .select('*')
+            .eq('created_by', user.id)
+            .order('created_at', { ascending: false })
+
+          data = createdByResult.data
+          error = createdByResult.error
+        } else {
+          data = containsResult.data
+          error = containsResult.error
+        }
+      } else {
+        data = overlapsResult.data
+        error = overlapsResult.error
+      }
+
+      if (error) {
+        console.error('🔍 All task queries failed:', error)
+        throw error
+      }
+
+      console.log('🔍 Tasks loaded successfully:', data?.length || 0, 'tasks')
 
       // Ensure data is an array
       const tasksData = Array.isArray(data) ? data : []
