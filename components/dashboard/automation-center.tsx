@@ -358,9 +358,9 @@ function AutomationCenterContent() {
                     </div>
                     <p className="text-sm text-subtle mb-3">{rule.description}</p>
                     <div className="flex flex-wrap gap-1">
-                      {rule.actions.map((action, i) => (
+                      {(rule.actions || []).map((action, i) => (
                         <Badge key={i} variant="outline" className="text-xs">
-                          {action.replace('_', ' ')}
+                          {action ? action.replace('_', ' ') : 'Unknown Action'}
                         </Badge>
                       ))}
                     </div>
@@ -387,7 +387,7 @@ function AutomationCenterContent() {
                 </CardContent>
               </Card>
             ) : (
-              automationRules.map((rule) => (
+              (automationRules || []).filter(rule => rule && rule.id).map((rule) => (
                 <motion.div
                   key={rule.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -403,12 +403,12 @@ function AutomationCenterContent() {
                               {rule.is_active ? 'Active' : 'Inactive'}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
-                              {rule.trigger_type.replace('_', ' ')}
+                              {rule.trigger_type ? rule.trigger_type.replace('_', ' ') : 'Unknown Trigger'}
                             </Badge>
                           </div>
-                          <p className="text-sm text-subtle mb-2">{rule.description}</p>
+                          <p className="text-sm text-subtle mb-2">{rule.description || 'No description available'}</p>
                           <div className="flex items-center space-x-4 text-xs text-subtle">
-                            <span>Executed {rule.execution_count} times</span>
+                            <span>Executed {rule.execution_count || 0} times</span>
                             {rule.last_executed && (
                               <span>Last run: {new Date(rule.last_executed).toLocaleDateString()}</span>
                             )}

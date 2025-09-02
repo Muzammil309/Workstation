@@ -72,59 +72,74 @@ function TodoListContent() {
         throw new Error('User ID is required to load tasks')
       }
 
-      console.log('🔍 Loading tasks for user:', user.id)
+      console.log('🔍 Loading comprehensive tasks for user:', user.id)
 
-      // Try multiple query approaches to ensure we get user tasks
-      let data, error
+      // Run multiple queries in parallel to get ALL tasks user should see
+      const [assignedTasksResult, createdTasksResult, containsTasksResult] = await Promise.allSettled([
+        // Query 1: Tasks where user is in assignees array (using overlaps - most reliable)
+        supabase
+          .from('tasks')
+          .select('*')
+          .overlaps('assignees', [user.id])
+          .order('created_at', { ascending: false }),
 
-      // First try: Use overlaps for array field
-      const overlapsResult = await supabase
-        .from('tasks')
-        .select('*')
-        .overlaps('assignees', [user.id])
-        .order('created_at', { ascending: false })
+        // Query 2: Tasks created by user
+        supabase
+          .from('tasks')
+          .select('*')
+          .eq('created_by', user.id)
+          .order('created_at', { ascending: false }),
 
-      if (overlapsResult.error) {
-        console.log('🔍 Overlaps query failed, trying contains:', overlapsResult.error)
-
-        // Second try: Use contains for array field
-        const containsResult = await supabase
+        // Query 3: Tasks where user is in assignees array (using contains as backup)
+        supabase
           .from('tasks')
           .select('*')
           .contains('assignees', [user.id])
           .order('created_at', { ascending: false })
+      ])
 
-        if (containsResult.error) {
-          console.log('🔍 Contains query failed, trying created_by:', containsResult.error)
+      // Collect all successful results
+      const allTasks: any[] = []
 
-          // Third try: Get tasks created by user
-          const createdByResult = await supabase
-            .from('tasks')
-            .select('*')
-            .eq('created_by', user.id)
-            .order('created_at', { ascending: false })
-
-          data = createdByResult.data
-          error = createdByResult.error
-        } else {
-          data = containsResult.data
-          error = containsResult.error
-        }
+      // Process assigned tasks (overlaps)
+      if (assignedTasksResult.status === 'fulfilled' && !assignedTasksResult.value.error) {
+        const assignedTasks = assignedTasksResult.value.data || []
+        allTasks.push(...assignedTasks)
+        console.log('🔍 Found', assignedTasks.length, 'assigned tasks (overlaps)')
       } else {
-        data = overlapsResult.data
-        error = overlapsResult.error
+        console.log('🔍 Assigned tasks query failed:', assignedTasksResult.status === 'fulfilled' ? assignedTasksResult.value.error : assignedTasksResult.reason)
       }
 
-      if (error) {
-        console.error('🔍 All task queries failed:', error)
-        throw error
+      // Process created tasks
+      if (createdTasksResult.status === 'fulfilled' && !createdTasksResult.value.error) {
+        const createdTasks = createdTasksResult.value.data || []
+        allTasks.push(...createdTasks)
+        console.log('🔍 Found', createdTasks.length, 'created tasks')
+      } else {
+        console.log('🔍 Created tasks query failed:', createdTasksResult.status === 'fulfilled' ? createdTasksResult.value.error : createdTasksResult.reason)
       }
 
-      console.log('🔍 Tasks loaded successfully:', data?.length || 0, 'tasks')
+      // Process contains tasks (backup method)
+      if (containsTasksResult.status === 'fulfilled' && !containsTasksResult.value.error) {
+        const containsTasks = containsTasksResult.value.data || []
+        allTasks.push(...containsTasks)
+        console.log('🔍 Found', containsTasks.length, 'tasks (contains method)')
+      } else {
+        console.log('🔍 Contains tasks query failed:', containsTasksResult.status === 'fulfilled' ? containsTasksResult.value.error : containsTasksResult.reason)
+      }
 
-      // Ensure data is an array
-      const tasksData = Array.isArray(data) ? data : []
-      setTasks(tasksData)
+      // Remove duplicates by task ID
+      const uniqueTasks = allTasks.filter((task, index, self) =>
+        index === self.findIndex(t => t.id === task.id)
+      )
+
+      // Sort by created_at descending
+      uniqueTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+      console.log('🔍 Total unique tasks loaded:', uniqueTasks.length)
+      console.log('🔍 Task IDs:', uniqueTasks.map(t => t.id))
+
+      setTasks(uniqueTasks)
     } catch (error: any) {
       console.error('Error loading user tasks:', error)
       toast({
