@@ -49,6 +49,20 @@ function TeamInboxContent() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [isConnected, setIsConnected] = useState(false)
 
+  // ✅ Load messages from cache immediately on mount
+  useEffect(() => {
+    const cachedMessages = localStorage.getItem('team_messages')
+    if (cachedMessages) {
+      try {
+        const parsed = JSON.parse(cachedMessages)
+        setMessages(parsed)
+        console.log('🚀 Loaded', parsed.length, 'messages from cache on mount')
+      } catch (error) {
+        console.error('Failed to parse cached messages:', error)
+      }
+    }
+  }, [])
+
   // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
     if (!user?.id) return
@@ -66,15 +80,18 @@ function TeamInboxContent() {
           console.log('📨 New message received:', payload.new)
           const newMessage = payload.new as Message
 
-          // Add message to state
+          // Add message to state and cache
           setMessages(prev => {
             // Prevent duplicates
             if (prev.find(m => m.id === newMessage.id)) {
               return prev
             }
-            return [...prev, newMessage].sort((a, b) =>
+            const updated = [...prev, newMessage].sort((a, b) =>
               new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             )
+            // Immediately cache the updated messages
+            localStorage.setItem('team_messages', JSON.stringify(updated))
+            return updated
           })
 
           // If message is from another user, trigger notification
@@ -104,9 +121,14 @@ function TeamInboxContent() {
         (payload) => {
           console.log('📝 Message updated:', payload.new)
           const updatedMessage = payload.new as Message
-          setMessages(prev => prev.map(msg =>
-            msg.id === updatedMessage.id ? updatedMessage : msg
-          ))
+          setMessages(prev => {
+            const updated = prev.map(msg =>
+              msg.id === updatedMessage.id ? updatedMessage : msg
+            )
+            // Cache the updated messages
+            localStorage.setItem('team_messages', JSON.stringify(updated))
+            return updated
+          })
         }
       )
       .subscribe((status) => {
@@ -129,6 +151,24 @@ function TeamInboxContent() {
     resetUnreadCount()
     setUnreadCount(0)
   }, [])
+
+  // Save messages to cache whenever messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem('team_messages', JSON.stringify(messages))
+      console.log('💾 Cached', messages.length, 'messages to localStorage')
+    }
+  }, [messages])
+
+  // Cleanup: Save messages on unmount
+  useEffect(() => {
+    return () => {
+      if (messages.length > 0) {
+        localStorage.setItem('team_messages', JSON.stringify(messages))
+        console.log('🔄 Saved messages on component unmount')
+      }
+    }
+  }, [messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

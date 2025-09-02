@@ -29,6 +29,7 @@ interface Task {
 }
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
+import { useNotificationTriggers } from '@/lib/notification-context'
 import { CreateTaskModal } from './create-task-modal'
 import { TaskPreviewModal } from './task-preview-modal'
 import {
@@ -79,6 +80,7 @@ export function TaskBoard() {
   const { user } = useAuth()
   const { toast } = useToast()
   const { users, isLoading: usersLoading, getUsersByIds } = useUsers()
+  const { notifyTaskAssigned, notifyTaskCompleted, notifyDeadlineApproaching } = useNotificationTriggers()
 
   // Drag & Drop sensors
   const sensors = useSensors(
@@ -207,6 +209,27 @@ export function TaskBoard() {
       // Update project task counts if task is associated with a project
       if (data.project_id) {
         await updateProjectTaskCounts(data.project_id)
+      }
+
+      // Trigger notifications for assigned users
+      if (data.assignees && data.assignees.length > 0) {
+        const assignedUsers = await getUsersByIds(data.assignees)
+        for (const assignedUser of assignedUsers) {
+          if (assignedUser.id !== user.id) {
+            await notifyTaskAssigned(data.title, user.name || user.email || 'Someone')
+          }
+        }
+      }
+
+      // Check for approaching deadline and trigger notification if needed
+      if (data.deadline) {
+        const deadlineDate = new Date(data.deadline)
+        const now = new Date()
+        const hoursUntilDeadline = Math.floor((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60))
+
+        if (hoursUntilDeadline <= 24 && hoursUntilDeadline > 0) {
+          await notifyDeadlineApproaching(data.title, hoursUntilDeadline)
+        }
       }
 
       // Reload tasks from database
@@ -626,7 +649,12 @@ export function TaskBoard() {
               }
             : task
         ))
-        
+
+        // Trigger notification for task completion
+        if (newStatus === 'completed') {
+          await notifyTaskCompleted(activeTask.title, user?.name || user?.email || 'Someone')
+        }
+
         toast({
           title: 'Success',
           description: `Task moved to ${newStatus}`,

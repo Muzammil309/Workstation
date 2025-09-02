@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
+import { useNotificationTriggers } from '@/lib/notification-context'
 import { ErrorBoundary, DashboardErrorFallback } from '@/components/error-boundary'
 
 interface DrawingElement {
@@ -53,6 +54,7 @@ interface TaskCreationData {
 function WhiteboardContent() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { notifyTaskAssigned } = useNotificationTriggers()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [currentTool, setCurrentTool] = useState<'pen' | 'rectangle' | 'circle' | 'text' | 'eraser'>('pen')
@@ -70,6 +72,8 @@ function WhiteboardContent() {
     assignee: ''
   })
   const [users, setUsers] = useState<any[]>([])
+  const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null)
+  const [isCollaborating, setIsCollaborating] = useState(false)
 
   const colors = [
     '#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00',
@@ -81,6 +85,7 @@ function WhiteboardContent() {
     const initializeWhiteboard = async () => {
       try {
         await Promise.all([loadUsers(), loadWhiteboardData()])
+        setupRealtimeSubscription()
       } catch (error) {
         console.error('Failed to initialize whiteboard:', error)
         toast({
@@ -92,6 +97,11 @@ function WhiteboardContent() {
     }
 
     initializeWhiteboard()
+
+    return () => {
+      // Cleanup subscription on unmount
+      supabase.removeAllChannels()
+    }
   }, [])
 
   const loadUsers = async () => {
@@ -120,6 +130,45 @@ function WhiteboardContent() {
     } catch (error: any) {
       console.error('Error loading whiteboard data:', error)
     }
+  }
+
+  const setupRealtimeSubscription = () => {
+    const subscription = supabase
+      .channel('whiteboard_realtime')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'whiteboard_elements' },
+        (payload) => {
+          console.log('🎨 New whiteboard element received:', payload.new)
+          const newElement = payload.new as DrawingElement
+
+          // Only add if it's from another user
+          if (newElement.created_by !== user?.id) {
+            setElements(prev => {
+              const updated = [...prev, newElement]
+              redrawCanvas(updated)
+              return updated
+            })
+            setIsCollaborating(true)
+            setTimeout(() => setIsCollaborating(false), 2000)
+          }
+        }
+      )
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'whiteboard_elements' },
+        (payload) => {
+          console.log('🗑️ Whiteboard element deleted:', payload.old)
+          setElements(prev => {
+            const updated = prev.filter(el => el.id !== payload.old.id)
+            redrawCanvas(updated)
+            return updated
+          })
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔗 Whiteboard subscription status:', status)
+      })
+
+    return subscription
   }
 
   const saveElement = async (element: DrawingElement) => {
@@ -206,19 +255,39 @@ function WhiteboardContent() {
       const y = e.clientY - rect.top
 
       setIsDrawing(true)
+      setStartPoint({ x, y })
 
-    if (currentTool === 'pen') {
-      const newElement: DrawingElement = {
-        id: `${Date.now()}-${Math.random()}`,
-        type: 'pen',
-        points: [x, y],
-        color: currentColor,
-        strokeWidth,
-        created_by: user?.id || '',
-        created_at: new Date().toISOString()
+      if (currentTool === 'pen') {
+        const newElement: DrawingElement = {
+          id: `${Date.now()}-${Math.random()}`,
+          type: 'pen',
+          points: [x, y],
+          color: currentColor,
+          strokeWidth,
+          created_by: user?.id || '',
+          created_at: new Date().toISOString()
+        }
+        setElements(prev => [...prev, newElement])
+      } else if (currentTool === 'text') {
+        const text = prompt('Enter text:')
+        if (text) {
+          const newElement: DrawingElement = {
+            id: `${Date.now()}-${Math.random()}`,
+            type: 'text',
+            x,
+            y,
+            text,
+            color: currentColor,
+            strokeWidth,
+            created_by: user?.id || '',
+            created_at: new Date().toISOString()
+          }
+          setElements(prev => [...prev, newElement])
+          saveElement(newElement)
+          redrawCanvas([...elements, newElement])
+        }
+        setIsDrawing(false)
       }
-      setElements(prev => [...prev, newElement])
-    }
     } catch (error) {
       console.error('Error in startDrawing:', error)
       setIsDrawing(false)
@@ -247,14 +316,47 @@ function WhiteboardContent() {
     redrawCanvas(elements)
   }
 
-  const stopDrawing = () => {
-    if (isDrawing && currentTool === 'pen') {
+  const stopDrawing = (e?: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return
+
+    if (currentTool === 'pen') {
       const lastElement = elements[elements.length - 1]
       if (lastElement) {
         saveElement(lastElement)
       }
+    } else if ((currentTool === 'rectangle' || currentTool === 'circle') && startPoint && e) {
+      const canvas = canvasRef.current
+      if (!canvas) return
+
+      const rect = canvas.getBoundingClientRect()
+      const endX = e.clientX - rect.left
+      const endY = e.clientY - rect.top
+
+      const width = Math.abs(endX - startPoint.x)
+      const height = Math.abs(endY - startPoint.y)
+      const x = Math.min(startPoint.x, endX)
+      const y = Math.min(startPoint.y, endY)
+
+      const newElement: DrawingElement = {
+        id: `${Date.now()}-${Math.random()}`,
+        type: currentTool,
+        x,
+        y,
+        width,
+        height,
+        color: currentColor,
+        strokeWidth,
+        created_by: user?.id || '',
+        created_at: new Date().toISOString()
+      }
+
+      setElements(prev => [...prev, newElement])
+      saveElement(newElement)
+      redrawCanvas([...elements, newElement])
     }
+
     setIsDrawing(false)
+    setStartPoint(null)
   }
 
   const clearCanvas = async () => {
@@ -313,35 +415,70 @@ function WhiteboardContent() {
     }
 
     try {
+      console.log('🎨 Creating task from whiteboard:', taskData)
+
       const newTask = {
         title: taskData.title,
-        description: taskData.description,
+        description: taskData.description || 'Created from whiteboard collaboration',
         priority: taskData.priority,
         status: 'pending',
         progress: 0,
         assignees: taskData.assignee ? [taskData.assignee] : [],
-        created_by: user?.id || ''
+        created_by: user?.id || '',
+        project_id: null,
+        deadline: null,
+        estimated_hours: 0,
+        tags: ['whiteboard'],
+        dependencies: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('tasks')
         .insert([newTask])
+        .select()
+        .single()
 
       if (error) throw error
 
+      // Trigger notification for assigned user
+      if (taskData.assignee && taskData.assignee !== user?.id) {
+        const assignedUser = users.find(u => u.id === taskData.assignee)
+        if (assignedUser) {
+          await notifyTaskAssigned(taskData.title, user?.name || user?.email || 'Whiteboard User')
+        }
+      }
+
+      // Save whiteboard context with the task
+      if (selectedArea) {
+        try {
+          await supabase
+            .from('whiteboard_tasks')
+            .insert([{
+              task_id: data.id,
+              whiteboard_area: selectedArea,
+              created_by: user?.id,
+              created_at: new Date().toISOString()
+            }])
+        } catch (contextError) {
+          console.log('Failed to save whiteboard context:', contextError)
+        }
+      }
+
       toast({
-        title: "Task created",
-        description: "Task has been created from whiteboard content",
+        title: "Task created successfully",
+        description: `"${taskData.title}" has been created from whiteboard content`,
       })
 
       setShowTaskCreation(false)
       setTaskData({ title: '', description: '', priority: 'medium', assignee: '' })
       setSelectedArea(null)
     } catch (error: any) {
-      console.error('Error creating task:', error)
+      console.error('❌ Error creating task from whiteboard:', error)
       toast({
         title: "Error",
-        description: "Failed to create task",
+        description: "Failed to create task from whiteboard",
         variant: "destructive"
       })
     }
@@ -366,6 +503,12 @@ function WhiteboardContent() {
         </div>
         
         <div className="flex items-center space-x-2">
+          {isCollaborating && (
+            <Badge variant="default" className="px-3 py-1 bg-green-500 text-white animate-pulse">
+              <Users className="w-3 h-3 mr-1" />
+              Live collaboration
+            </Badge>
+          )}
           <Badge variant="outline" className="px-3 py-1">
             <Users className="w-3 h-3 mr-1" />
             {users.length} team members

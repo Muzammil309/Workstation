@@ -210,7 +210,7 @@ export function CalendarView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Calendar</h1>
+          <h1 className="text-3xl font-bold text-foreground">Calendar</h1>
           <p className="text-muted-foreground">Track task deadlines and manage your schedule</p>
         </div>
         <Button onClick={() => {}} variant="neon">
@@ -297,7 +297,7 @@ export function CalendarView() {
             <ChevronLeft className="h-4 w-4" />
           </Button>
           
-          <h2 className="text-xl font-semibold">
+          <h2 className="text-xl font-semibold text-foreground">
             {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
           </h2>
           
@@ -371,7 +371,7 @@ export function CalendarView() {
         {/* Calendar Header */}
         <div className="grid grid-cols-7 bg-muted/50">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="p-3 text-center font-medium text-sm">
+            <div key={day} className="p-3 text-center font-medium text-sm text-foreground">
               {day}
             </div>
           ))}
@@ -418,11 +418,11 @@ export function CalendarView() {
                 {day && (
                   <>
                     <div className={`text-sm font-medium mb-2 ${
-                      isToday 
-                        ? 'bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto' 
+                      isToday
+                        ? 'bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto'
                         : hasOverdueTasks
                         ? 'bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto'
-                        : ''
+                        : 'text-foreground'
                     }`}>
                       {day.getDate()}
                     </div>
@@ -431,7 +431,7 @@ export function CalendarView() {
                       {tasksForDate.slice(0, 3).map(task => (
                         <div
                           key={task.id}
-                          className={`text-xs p-1 rounded cursor-pointer text-white truncate border-l-2 ${priorityColors[task.priority]} ${
+                          className={`text-xs p-1 rounded cursor-pointer bg-muted text-foreground truncate border-l-2 ${priorityColors[task.priority]} ${
                             task.status === 'completed' ? 'opacity-60' : ''
                           }`}
                           title={`${task.title} - ${task.assignee} (${task.status})`}
@@ -484,7 +484,7 @@ export function CalendarView() {
 
       {/* Upcoming Deadlines */}
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold">Upcoming Deadlines</h3>
+        <h3 className="text-lg font-semibold text-foreground">Upcoming Deadlines</h3>
         <div className="space-y-3">
           {getUpcomingDeadlines()
             .slice(0, 5)
@@ -505,7 +505,7 @@ export function CalendarView() {
                         Due: {new Date(task.deadline).toLocaleDateString()}
                       </span>
                     </div>
-                    <h4 className="font-medium mb-1">{task.title}</h4>
+                    <h4 className="font-medium mb-1 text-foreground">{task.title}</h4>
                     <p className="text-sm text-muted-foreground mb-2">{task.description}</p>
                     <div className="flex items-center space-x-4 text-xs text-muted-foreground">
                       <span>Assignee: {task.assignee}</span>
