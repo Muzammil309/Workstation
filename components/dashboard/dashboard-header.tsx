@@ -5,6 +5,7 @@ import { Menu, Bell, Search, User, LogOut, Clock, ChevronLeft, ChevronRight } fr
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { NotificationDropdown } from '@/components/ui/notification-dropdown'
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
 import { showNotification } from '@/lib/notifications'
@@ -96,17 +97,8 @@ export function DashboardHeader({ user, onMenuClick, onToggleSidebar, isSidebarC
 
         {/* Right Section */}
         <div className="flex items-center space-x-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="relative"
-            onClick={() => showNotification("Test Notification", "This is a test notification with sound!")}
-            title="Test Notification Sound"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-          </Button>
-          
+          <NotificationDropdown />
+
           <ThemeToggle />
           
           <div className="flex items-center space-x-2">

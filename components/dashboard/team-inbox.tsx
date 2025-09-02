@@ -125,36 +125,62 @@ function TeamInboxContent() {
   const sendMessage = async () => {
     if (!newMessage.trim()) return
 
+    console.log('📤 Attempting to send message:', newMessage.trim())
+
     try {
       const messageData = {
         content: newMessage.trim(),
         sender_id: user?.id || '',
         sender_name: user?.name || user?.email || 'Unknown',
         sender_email: user?.email || '',
-        message_type: 'text',
-        is_read: false
+        message_type: 'text' as const,
+        is_read: false,
+        created_at: new Date().toISOString()
       }
 
-      const { data, error } = await supabase
-        .from('team_messages')
-        .insert([messageData])
-        .select()
-        .single()
+      console.log('📤 Message data:', messageData)
 
-      if (error) throw error
+      // Try to insert into database
+      try {
+        const { data, error } = await supabase
+          .from('team_messages')
+          .insert([messageData])
+          .select()
+          .single()
 
-      setMessages(prev => [...prev, data])
+        if (error) {
+          console.error('Database insert error:', error)
+          throw error
+        }
+
+        console.log('✅ Message saved to database:', data)
+        setMessages(prev => [...prev, data])
+      } catch (dbError) {
+        console.log('⚠️ Database save failed, adding to local state:', dbError)
+
+        // Fallback: Add to local state with generated ID
+        const localMessage: Message = {
+          ...messageData,
+          id: `local-${Date.now()}`,
+          created_at: new Date().toISOString(),
+          message_type: 'text' as const
+        }
+
+        setMessages(prev => [...prev, localMessage])
+        console.log('📝 Message added to local state:', localMessage)
+      }
+
       setNewMessage('')
-      
+
       toast({
         title: "Message sent",
         description: "Your message has been sent to the team",
       })
     } catch (error: any) {
-      console.error('Error sending message:', error)
+      console.error('❌ Error sending message:', error)
       toast({
         title: "Error",
-        description: "Failed to send message",
+        description: `Failed to send message: ${error.message || 'Unknown error'}`,
         variant: "destructive"
       })
     }

@@ -74,113 +74,83 @@ function TodoListContent() {
 
       console.log('🔍 Loading comprehensive tasks for user:', user.id, 'with email:', user.email)
 
-      // Run multiple queries in parallel to get ALL tasks user should see
+      // Simplified but comprehensive approach - get ALL tasks and filter client-side for reliability
+      console.log('📊 Attempting comprehensive task retrieval...')
+
       const [
+        allTasksResult,
         assignedTasksResult,
-        createdTasksResult,
-        containsTasksResult,
-        emailAssignedResult,
-        collaborativeTasksResult,
-        teamTasksResult
+        createdTasksResult
       ] = await Promise.allSettled([
-        // Query 1: Tasks where user is in assignees array (using overlaps - most reliable)
+        // Query 1: Get ALL tasks and filter client-side (most reliable for complex assignments)
+        supabase
+          .from('tasks')
+          .select('*')
+          .order('created_at', { ascending: false }),
+
+        // Query 2: Tasks where user is in assignees array (using overlaps)
         supabase
           .from('tasks')
           .select('*')
           .overlaps('assignees', [user.id])
           .order('created_at', { ascending: false }),
 
-        // Query 2: Tasks created by user
+        // Query 3: Tasks created by user
         supabase
           .from('tasks')
           .select('*')
           .eq('created_by', user.id)
-          .order('created_at', { ascending: false }),
-
-        // Query 3: Tasks where user is in assignees array (using contains as backup)
-        supabase
-          .from('tasks')
-          .select('*')
-          .contains('assignees', [user.id])
-          .order('created_at', { ascending: false }),
-
-        // Query 4: Tasks assigned by email (for team assignments)
-        supabase
-          .from('tasks')
-          .select('*')
-          .or(`assignees.cs.{${user.id}},assignees.cs.{${user.email}}`)
-          .order('created_at', { ascending: false }),
-
-        // Query 5: Multi-assignee collaborative tasks (where assignees array has multiple entries and includes user)
-        supabase
-          .from('tasks')
-          .select('*')
-          .filter('assignees', 'cs', `{${user.id}}`)
-          .order('created_at', { ascending: false }),
-
-        // Query 6: Team-based tasks (using different possible team assignment patterns)
-        supabase
-          .from('tasks')
-          .select('*')
-          .or(`assignees.cs.{${user.email}},assigned_to.eq.${user.id},assigned_to.eq.${user.email}`)
           .order('created_at', { ascending: false })
       ])
 
       // Collect all successful results
-      const allTasks: any[] = []
+      let allTasks: any[] = []
 
-      // Process assigned tasks (overlaps)
-      if (assignedTasksResult.status === 'fulfilled' && !assignedTasksResult.value.error) {
-        const assignedTasks = assignedTasksResult.value.data || []
-        allTasks.push(...assignedTasks)
-        console.log('🔍 Found', assignedTasks.length, 'assigned tasks (overlaps)')
-      } else {
-        console.log('🔍 Assigned tasks query failed:', assignedTasksResult.status === 'fulfilled' ? assignedTasksResult.value.error : assignedTasksResult.reason)
-      }
+      // Process all tasks result (most comprehensive)
+      if (allTasksResult.status === 'fulfilled' && !allTasksResult.value.error) {
+        const allTasksData = allTasksResult.value.data || []
+        console.log('🔍 Retrieved', allTasksData.length, 'total tasks from database')
 
-      // Process created tasks
-      if (createdTasksResult.status === 'fulfilled' && !createdTasksResult.value.error) {
-        const createdTasks = createdTasksResult.value.data || []
-        allTasks.push(...createdTasks)
-        console.log('🔍 Found', createdTasks.length, 'created tasks')
-      } else {
-        console.log('🔍 Created tasks query failed:', createdTasksResult.status === 'fulfilled' ? createdTasksResult.value.error : createdTasksResult.reason)
-      }
+        // Client-side filtering for user-relevant tasks
+        const userRelevantTasks = allTasksData.filter(task => {
+          // Check if user is assigned to this task
+          const isAssigned = task.assignees && Array.isArray(task.assignees) && task.assignees.includes(user.id)
+          // Check if user created this task
+          const isCreator = task.created_by === user.id
+          // Check if user is assigned by email
+          const isEmailAssigned = task.assignees && Array.isArray(task.assignees) && task.assignees.includes(user.email)
 
-      // Process contains tasks (backup method)
-      if (containsTasksResult.status === 'fulfilled' && !containsTasksResult.value.error) {
-        const containsTasks = containsTasksResult.value.data || []
-        allTasks.push(...containsTasks)
-        console.log('🔍 Found', containsTasks.length, 'tasks (contains method)')
-      } else {
-        console.log('🔍 Contains tasks query failed:', containsTasksResult.status === 'fulfilled' ? containsTasksResult.value.error : containsTasksResult.reason)
-      }
+          return isAssigned || isCreator || isEmailAssigned
+        })
 
-      // Process email assigned tasks (team assignments)
-      if (emailAssignedResult.status === 'fulfilled' && !emailAssignedResult.value.error) {
-        const emailTasks = emailAssignedResult.value.data || []
-        allTasks.push(...emailTasks)
-        console.log('🔍 Found', emailTasks.length, 'email/team assigned tasks')
-      } else {
-        console.log('🔍 Email assigned tasks query failed:', emailAssignedResult.status === 'fulfilled' ? emailAssignedResult.value.error : emailAssignedResult.reason)
-      }
+        allTasks = userRelevantTasks
+        console.log('🔍 Filtered to', userRelevantTasks.length, 'user-relevant tasks')
 
-      // Process collaborative tasks (multi-assignee)
-      if (collaborativeTasksResult.status === 'fulfilled' && !collaborativeTasksResult.value.error) {
-        const collaborativeTasks = collaborativeTasksResult.value.data || []
-        allTasks.push(...collaborativeTasks)
-        console.log('🔍 Found', collaborativeTasks.length, 'collaborative multi-assignee tasks')
-      } else {
-        console.log('🔍 Collaborative tasks query failed:', collaborativeTasksResult.status === 'fulfilled' ? collaborativeTasksResult.value.error : collaborativeTasksResult.reason)
-      }
+        // Detailed breakdown
+        const individualTasks = userRelevantTasks.filter(t => t.assignees && t.assignees.length === 1 && t.assignees.includes(user.id))
+        const multiAssigneeTasks = userRelevantTasks.filter(t => t.assignees && t.assignees.length > 1 && t.assignees.includes(user.id))
+        const createdTasks = userRelevantTasks.filter(t => t.created_by === user.id)
 
-      // Process team tasks (alternative team assignment patterns)
-      if (teamTasksResult.status === 'fulfilled' && !teamTasksResult.value.error) {
-        const teamTasks = teamTasksResult.value.data || []
-        allTasks.push(...teamTasks)
-        console.log('🔍 Found', teamTasks.length, 'team-based tasks')
+        console.log('📊 Task breakdown:')
+        console.log('  - Individual assignments:', individualTasks.length)
+        console.log('  - Multi-assignee tasks:', multiAssigneeTasks.length)
+        console.log('  - Created by user:', createdTasks.length)
+
       } else {
-        console.log('🔍 Team tasks query failed:', teamTasksResult.status === 'fulfilled' ? teamTasksResult.value.error : teamTasksResult.reason)
+        console.log('🔍 All tasks query failed, falling back to specific queries')
+
+        // Fallback to specific queries
+        if (assignedTasksResult.status === 'fulfilled' && !assignedTasksResult.value.error) {
+          const assignedTasks = assignedTasksResult.value.data || []
+          allTasks.push(...assignedTasks)
+          console.log('🔍 Found', assignedTasks.length, 'assigned tasks (overlaps)')
+        }
+
+        if (createdTasksResult.status === 'fulfilled' && !createdTasksResult.value.error) {
+          const createdTasks = createdTasksResult.value.data || []
+          allTasks.push(...createdTasks)
+          console.log('🔍 Found', createdTasks.length, 'created tasks')
+        }
       }
 
       // Remove duplicates by task ID
