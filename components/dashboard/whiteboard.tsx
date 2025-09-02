@@ -71,19 +71,12 @@ function WhiteboardContent() {
   })
   const [users, setUsers] = useState<any[]>([])
 
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Please log in to access the whiteboard.</p>
-      </div>
-    )
-  }
-
   const colors = [
-    '#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', 
+    '#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00',
     '#FF00FF', '#00FFFF', '#FFA500', '#800080', '#008000'
   ]
 
+  // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
     const initializeWhiteboard = async () => {
       try {
@@ -352,6 +345,15 @@ function WhiteboardContent() {
         variant: "destructive"
       })
     }
+  }
+
+  // ✅ Conditional return AFTER all hooks are declared
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Please log in to access the whiteboard.</p>
+      </div>
+    )
   }
 
   return (

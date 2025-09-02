@@ -1645,7 +1645,7 @@ function SortableTaskCard({
         
         {/* Action Buttons */}
         <div
-          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 opacity-0 group-hover:opacity-100 transition-all duration-300"
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 opacity-100 transition-all duration-300"
           onPointerDown={preventDrag}
         >
           <div className="flex items-center flex-wrap gap-1 sm:gap-2">

@@ -43,14 +43,7 @@ function TodoListContent() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterPriority, setFilterPriority] = useState<string>('all')
 
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Please log in to access your to-do list.</p>
-      </div>
-    )
-  }
-
+  // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
     const initializeTodoList = async () => {
       if (user) {
@@ -199,6 +192,15 @@ function TodoListContent() {
     inProgress: filteredTasks.filter(t => t.status === 'in-progress').length,
     completed: filteredTasks.filter(t => t.status === 'completed').length,
     overdue: filteredTasks.filter(t => isOverdue(t.deadline)).length
+  }
+
+  // ✅ Conditional return AFTER all hooks are declared
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Please log in to access your to-do list.</p>
+      </div>
+    )
   }
 
   if (isLoading) {

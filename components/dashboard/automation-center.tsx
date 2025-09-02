@@ -77,14 +77,7 @@ function AutomationCenterContent() {
   const [showCreateTemplate, setShowCreateTemplate] = useState(false)
   const [selectedTab, setSelectedTab] = useState<'rules' | 'templates' | 'analytics'>('rules')
 
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Please log in to access automation features.</p>
-      </div>
-    )
-  }
-
+  // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
     loadAutomationData()
   }, [])
@@ -194,6 +187,15 @@ function AutomationCenterContent() {
       task_count: 8
     }
   ]
+
+  // ✅ Conditional return AFTER all hooks are declared
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Please log in to access automation features.</p>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (

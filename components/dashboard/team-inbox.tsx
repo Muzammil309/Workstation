@@ -44,14 +44,7 @@ function TeamInboxContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [unreadCount, setUnreadCount] = useState(0)
 
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Please log in to access the team inbox.</p>
-      </div>
-    )
-  }
-
+  // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
     loadMessages()
     loadUsers()
@@ -221,20 +214,29 @@ function TeamInboxContent() {
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
 
     if (diffInHours < 24) {
-      return date.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
         minute: '2-digit',
-        hour12: true 
+        hour12: true
       })
     } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         hour12: true
       })
     }
+  }
+
+  // ✅ Conditional return AFTER all hooks are declared
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Please log in to access the team inbox.</p>
+      </div>
+    )
   }
 
   if (isLoading) {
