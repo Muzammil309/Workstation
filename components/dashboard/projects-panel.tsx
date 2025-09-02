@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, FolderOpen, Users, Calendar, Target, TrendingUp, MoreVertical, Edit, Trash2, Eye, X, Save, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -64,12 +64,7 @@ export function ProjectsPanel() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const { toast } = useToast()
 
-  // Load projects and tasks from Supabase
-  useEffect(() => {
-    loadProjectsAndTasks()
-  }, [])
-
-  const loadProjectsAndTasks = async () => {
+  const loadProjectsAndTasks = useCallback(async () => {
     try {
       setIsLoading(true)
 
@@ -100,7 +95,12 @@ export function ProjectsPanel() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [toast])
+
+  // Load projects and tasks from Supabase
+  useEffect(() => {
+    loadProjectsAndTasks()
+  }, [loadProjectsAndTasks])
 
   // Keep the original loadProjects function for compatibility
   const loadProjects = loadProjectsAndTasks

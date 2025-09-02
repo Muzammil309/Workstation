@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Calendar, Clock, Users, Target, Plus, ChevronLeft, ChevronRight, Filter, CalendarDays, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -64,12 +64,7 @@ export function CalendarView() {
   const { user } = useAuth()
   const { users, isLoading: usersLoading } = useUsers()
 
-  // Load tasks from Supabase
-  useEffect(() => {
-    loadTasks()
-  }, [])
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     try {
       setIsLoading(true)
       const { data, error } = await supabase
@@ -89,7 +84,12 @@ export function CalendarView() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [toast])
+
+  // Load tasks from Supabase
+  useEffect(() => {
+    loadTasks()
+  }, [loadTasks])
 
 
 

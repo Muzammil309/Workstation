@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FileText, Download, Filter, Calendar, TrendingUp, Users, Target, BarChart3, PieChart, Activity, Clock, CheckCircle, X, ChevronDown, ChevronUp, Eye, Settings, RefreshCw, LineChart, BarChart, PieChart as PieChartIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -57,12 +57,7 @@ export function ReportsPanel() {
   const [realTeamMembers, setRealTeamMembers] = useState<TeamMember[]>([])
   const [isDataLoading, setIsDataLoading] = useState(true)
 
-  // Load real data from Supabase
-  useEffect(() => {
-    loadRealData()
-  }, [])
-
-  const loadRealData = async () => {
+  const loadRealData = useCallback(async () => {
     try {
       setIsDataLoading(true)
       
@@ -132,7 +127,12 @@ export function ReportsPanel() {
     } finally {
       setIsDataLoading(false)
     }
-  }
+  }, [])
+
+  // Load real data from Supabase
+  useEffect(() => {
+    loadRealData()
+  }, [loadRealData])
 
   // Use real data instead of sample data
   const sampleTasks = realTasks

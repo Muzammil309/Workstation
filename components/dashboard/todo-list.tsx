@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { CheckSquare, Clock, AlertCircle, Calendar, User, Plus, Filter, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -43,28 +43,7 @@ function TodoListContent() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterPriority, setFilterPriority] = useState<string>('all')
 
-  // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
-  useEffect(() => {
-    const initializeTodoList = async () => {
-      if (user) {
-        try {
-          await Promise.all([loadUserTasks(), loadProjects()])
-        } catch (error) {
-          console.error('Failed to initialize todo list:', error)
-          // Don't use handleError in useEffect to avoid dependency issues
-          toast({
-            title: "Error",
-            description: "Failed to initialize todo list",
-            variant: "destructive"
-          })
-        }
-      }
-    }
-
-    initializeTodoList()
-  }, [user])
-
-  const loadUserTasks = async () => {
+  const loadUserTasks = useCallback(async () => {
     try {
       setIsLoading(true)
 
@@ -195,9 +174,9 @@ function TodoListContent() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user?.id, toast])
 
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('projects')
@@ -208,7 +187,28 @@ function TodoListContent() {
     } catch (error: any) {
       console.error('Error loading projects:', error)
     }
-  }
+  }, [])
+
+  // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
+  useEffect(() => {
+    const initializeTodoList = async () => {
+      if (user) {
+        try {
+          await Promise.all([loadUserTasks(), loadProjects()])
+        } catch (error) {
+          console.error('Failed to initialize todo list:', error)
+          // Don't use handleError in useEffect to avoid dependency issues
+          toast({
+            title: "Error",
+            description: "Failed to initialize todo list",
+            variant: "destructive"
+          })
+        }
+      }
+    }
+
+    initializeTodoList()
+  }, [user, loadUserTasks, loadProjects, toast])
 
   const updateTaskStatus = async (taskId: string, newStatus: 'pending' | 'in-progress' | 'completed') => {
     try {

@@ -39,17 +39,30 @@ export function NotificationDropdown({ className }: NotificationDropdownProps) {
     setSoundEnabled
   } = useNotifications()
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const isMountedRef = useRef(true)
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setIsOpen(false)
+        }
       }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  // Cleanup effect to prevent state updates after unmounting
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
   }, [])
 
   const getNotificationIcon = (type: Notification['type']) => {

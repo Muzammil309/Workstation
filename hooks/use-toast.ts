@@ -196,7 +196,7 @@ function useToast(userPreferences?: any) {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+  }, [])
 
   // Create a toast function that includes user preferences
   const toastWithPreferences = (props: Toast) => {
