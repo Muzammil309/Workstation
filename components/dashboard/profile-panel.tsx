@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { User, Mail, Phone, MapPin, Briefcase, Calendar, Edit, Save, X, Camera, Shield, Key, Bell, Palette, Globe, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -101,13 +101,7 @@ export function ProfilePanel() {
     }
   }
 
-  useEffect(() => {
-    if (user) {
-      loadProfile()
-    }
-  }, [user])
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       setIsLoading(true)
       const { data, error } = await supabase
@@ -155,7 +149,13 @@ export function ProfilePanel() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user?.id, toast])
+
+  useEffect(() => {
+    if (user) {
+      loadProfile()
+    }
+  }, [user, loadProfile])
 
   const handleSave = async () => {
     try {

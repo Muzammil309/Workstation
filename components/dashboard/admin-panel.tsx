@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -57,14 +57,7 @@ export default function AdminPanel() {
   })
   const [skillInput, setSkillInput] = useState('')
 
-  useEffect(() => {
-    // Only fetch users if user is admin
-    if (user && user.role === 'admin') {
-      fetchUsers()
-    }
-  }, [user])
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase
@@ -84,7 +77,14 @@ export default function AdminPanel() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    // Only fetch users if user is admin
+    if (user && user.role === 'admin') {
+      fetchUsers()
+    }
+  }, [user, fetchUsers])
 
   const updateUserRole = async (userId: string, newRole: 'admin' | 'user') => {
     try {

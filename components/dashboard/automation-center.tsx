@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { 
   Zap, 
@@ -86,12 +86,7 @@ function AutomationCenterContent() {
     is_active: true
   })
 
-  // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
-  useEffect(() => {
-    loadAutomationData()
-  }, [])
-
-  const loadAutomationData = async () => {
+  const loadAutomationData = useCallback(async () => {
     try {
       setIsLoading(true)
       console.log('🔍 Loading automation data...')
@@ -190,7 +185,12 @@ function AutomationCenterContent() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [toast])
+
+  // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
+  useEffect(() => {
+    loadAutomationData()
+  }, [loadAutomationData])
 
   const toggleRuleStatus = async (ruleId: string, isActive: boolean) => {
     try {

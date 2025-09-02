@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users, Plus, Search, MoreVertical, Edit, Trash2, Eye, Mail, Phone, MapPin, Calendar, X, UserPlus, Save, UserCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -56,12 +56,7 @@ export function TeamManagement() {
   const { toast } = useToast()
   const { user } = useAuth()
 
-  // Load team members from Supabase
-  useEffect(() => {
-    loadTeamMembers()
-  }, [])
-
-  const loadTeamMembers = async () => {
+  const loadTeamMembers = useCallback(async () => {
     try {
       setIsLoading(true)
       const { data, error } = await supabase
@@ -80,7 +75,12 @@ export function TeamManagement() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [toast])
+
+  // Load team members from Supabase
+  useEffect(() => {
+    loadTeamMembers()
+  }, [loadTeamMembers])
 
   const filteredTeam = team.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
