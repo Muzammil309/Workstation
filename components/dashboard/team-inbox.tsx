@@ -168,9 +168,39 @@ function TeamInboxContent() {
         }
       })
 
+
+    // Subscribe to individual messages in real-time
+    const dmSub = supabase
+      .channel('individual_messages_realtime')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'individual_messages' },
+        (payload) => {
+          const dm = payload.new as any
+          // Only update if this message belongs to current conversation
+          if (!isMountedRef.current) return
+          const otherId = dm.sender_id === user?.id ? dm.recipient_id : dm.sender_id
+          setIndividualMessages(prev => {
+            const list = prev[otherId] || []
+            if (list.find((m: any) => m.id === dm.id)) return prev
+            const updated = [...list, dm].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+            // Cache per-conversation
+            const cachedKey = `individual_messages_${otherId}`
+            localStorage.setItem(cachedKey, JSON.stringify(updated))
+            return { ...prev, [otherId]: updated }
+          })
+        }
+      )
+      .subscribe()
+
+    // Cleanup
     return () => {
-      console.log('🔌 Unsubscribing from team messages')
-      supabase.removeChannel(subscription)
+      try {
+        supabase.removeChannel(dmSub)
+      } catch {}
+      try {
+        console.log('🔌 Unsubscribing from team messages')
+        supabase.removeChannel(subscription)
+      } catch {}
     }
   }, [user?.id])
 
@@ -244,14 +274,19 @@ function TeamInboxContent() {
           console.log('📝 Set demo messages')
         }
       } else {
-        setMessages(data || [])
-        // Cache messages in localStorage
-        localStorage.setItem('team_messages', JSON.stringify(data || []))
-        console.log('✅ Loaded', data?.length || 0, 'messages from database')
+        // Merge DB messages with any cached local messages (preserve offline-sent items)
+        const cached = JSON.parse(localStorage.getItem('team_messages') || '[]')
+        const dbMessages = data || []
+        const map: Record<string, Message> = {}
+        ;[...cached, ...dbMessages].forEach((m: Message) => { map[m.id] = m })
+        const merged = Object.values(map).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        setMessages(merged)
+        localStorage.setItem('team_messages', JSON.stringify(merged))
+        console.log('✅ Loaded', dbMessages.length, 'messages from database, merged with', cached.length, 'cached -> total', merged.length)
       }
 
       // Count unread messages
-      const currentMessages = data || JSON.parse(localStorage.getItem('team_messages') || '[]')
+      const currentMessages: Message[] = JSON.parse(localStorage.getItem('team_messages') || '[]')
       const unread = currentMessages.filter((msg: Message) => !msg.is_read && msg.sender_id !== user?.id).length || 0
       setUnreadCount(unread)
       setUnreadMessageCount(unread)
@@ -291,6 +326,7 @@ function TeamInboxContent() {
         .select('*')
         .or(`and(sender_id.eq.${user?.id},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${user?.id})`)
         .order('created_at', { ascending: true })
+        .limit(200)
 
       if (error) {
         console.log('⚠️ Database query failed for individual messages:', error)
@@ -306,14 +342,19 @@ function TeamInboxContent() {
       }
 
       const messagesData = data || []
-      setIndividualMessages(prev => ({ ...prev, [otherUserId]: messagesData }))
 
-      // Cache individual messages
+      // Merge with cached to preserve offline-sent items
       const cachedKey = `individual_messages_${otherUserId}`
-      localStorage.setItem(cachedKey, JSON.stringify(messagesData))
-      localStorage.setItem('individual_messages', JSON.stringify({ ...individualMessages, [otherUserId]: messagesData }))
+      const cached = JSON.parse(localStorage.getItem(cachedKey) || '[]')
+      const map: Record<string, any> = {}
+      ;[...cached, ...messagesData].forEach((m: any) => { map[m.id] = m })
+      const merged = Object.values(map).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
-      console.log('📥 Loaded', messagesData.length, 'individual messages from database')
+      setIndividualMessages(prev => ({ ...prev, [otherUserId]: merged }))
+      localStorage.setItem(cachedKey, JSON.stringify(merged))
+      localStorage.setItem('individual_messages', JSON.stringify({ ...individualMessages, [otherUserId]: merged }))
+
+      console.log('📥 Loaded', messagesData.length, 'individual messages from DB, merged with', cached.length, 'cached -> total', merged.length)
     } catch (error: any) {
       console.error('Error loading individual messages:', error)
     }
@@ -342,11 +383,35 @@ function TeamInboxContent() {
 
       if (error) throw error
 
-      // Update local state
-      setIndividualMessages(prev => ({
-        ...prev,
-        [selectedUser.id]: [...(prev[selectedUser.id] || []), data]
-      }))
+      // Update local state and cache
+      setIndividualMessages(prev => {
+        const updated = [...(prev[selectedUser.id] || []), data]
+        const sorted = updated.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        const cachedKey = `individual_messages_${selectedUser.id}`
+        localStorage.setItem(cachedKey, JSON.stringify(sorted))
+        return { ...prev, [selectedUser.id]: sorted }
+
+      // Fallback: write a local pending message if DB insert fails
+      const localDm: Message = {
+        id: `local-${Date.now()}`,
+        content: messageData.content,
+        sender_id: messageData.sender_id!,
+        sender_name: messageData.sender_name,
+        sender_email: user?.email || '',
+        created_at: new Date().toISOString(),
+        is_read: false,
+        message_type: 'text'
+      }
+      if (!selectedUser) throw new Error('No recipient selected')
+      const recipientId = selectedUser!.id
+      setIndividualMessages(prev => {
+        const updated: Message[] = [...(prev[recipientId] || []), localDm]
+        const cachedKey = `individual_messages_${recipientId}`
+        localStorage.setItem(cachedKey, JSON.stringify(updated))
+        return { ...prev, [recipientId]: updated }
+      })
+
+      })
 
       // Cache the updated messages
       const updatedMessages = [...(individualMessages[selectedUser.id] || []), data]

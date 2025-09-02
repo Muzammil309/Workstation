@@ -81,7 +81,7 @@ function AutomationCenterContent() {
   const [ruleFormData, setRuleFormData] = useState({
     name: '',
     description: '',
-    trigger_type: 'task_created',
+    trigger_type: 'event_created',
     action_type: 'send_notification',
     is_active: true
   })
@@ -278,7 +278,7 @@ function AutomationCenterContent() {
       setRuleFormData({
         name: '',
         description: '',
-        trigger_type: 'task_created',
+        trigger_type: 'event_created',
         action_type: 'send_notification',
         is_active: true
       })
@@ -353,7 +353,7 @@ function AutomationCenterContent() {
       setRuleFormData({
         name: '',
         description: '',
-        trigger_type: 'task_created',
+        trigger_type: 'event_created',
         action_type: 'send_notification',
         is_active: true
       })
