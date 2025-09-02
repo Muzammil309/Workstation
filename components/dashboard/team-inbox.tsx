@@ -13,6 +13,8 @@ import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { showNotification } from '@/lib/notifications'
+import { useNotificationTriggers } from '@/lib/notification-context'
+import { useInbox } from '@/lib/inbox-context'
 import { ErrorBoundary, DashboardErrorFallback } from '@/components/error-boundary'
 
 interface Message {
@@ -36,6 +38,8 @@ interface User {
 function TeamInboxContent() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { notifyMessageReceived } = useNotificationTriggers()
+  const { setUnreadMessageCount, incrementUnreadCount, resetUnreadCount } = useInbox()
   const [messages, setMessages] = useState<Message[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [newMessage, setNewMessage] = useState('')
@@ -43,24 +47,51 @@ function TeamInboxContent() {
   const [searchTerm, setSearchTerm] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [isConnected, setIsConnected] = useState(false)
 
   // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
+    if (!user?.id) return
+
+    console.log('🔄 TeamInbox: Initializing for user:', user.id)
     loadMessages()
     loadUsers()
-    
+
     // Set up real-time subscription for new messages
     const subscription = supabase
-      .channel('team_messages')
-      .on('postgres_changes', 
+      .channel('team_messages_realtime')
+      .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'team_messages' },
         (payload) => {
+          console.log('📨 New message received:', payload.new)
           const newMessage = payload.new as Message
+
+          // Add message to state
+          setMessages(prev => {
+            // Prevent duplicates
+            if (prev.find(m => m.id === newMessage.id)) {
+              return prev
+            }
+            return [...prev, newMessage].sort((a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            )
+          })
+
+          // If message is from another user, trigger notification
           if (newMessage.sender_id !== user?.id) {
-            setMessages(prev => [...prev, newMessage])
-            setUnreadCount(prev => prev + 1)
-            
-            // Show notification and play sound
+            setUnreadCount(prev => {
+              const newCount = prev + 1
+              setUnreadMessageCount(newCount)
+              return newCount
+            })
+
+            // Trigger notification through our notification system
+            notifyMessageReceived(
+              newMessage.sender_name,
+              newMessage.content.substring(0, 50) + (newMessage.content.length > 50 ? '...' : '')
+            )
+
+            // Also show legacy notification
             showNotification(
               `New message from ${newMessage.sender_name}`,
               newMessage.content.substring(0, 100) + (newMessage.content.length > 100 ? '...' : '')
@@ -68,16 +99,36 @@ function TeamInboxContent() {
           }
         }
       )
-      .subscribe()
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'team_messages' },
+        (payload) => {
+          console.log('📝 Message updated:', payload.new)
+          const updatedMessage = payload.new as Message
+          setMessages(prev => prev.map(msg =>
+            msg.id === updatedMessage.id ? updatedMessage : msg
+          ))
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Subscription status:', status)
+        setIsConnected(status === 'SUBSCRIBED')
+      })
 
     return () => {
-      subscription.unsubscribe()
+      console.log('🔌 Unsubscribing from team messages')
+      supabase.removeChannel(subscription)
     }
-  }, [user?.id])
+  }, [user?.id, notifyMessageReceived])
 
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Reset unread count when component is active
+  useEffect(() => {
+    resetUnreadCount()
+    setUnreadCount(0)
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -86,22 +137,57 @@ function TeamInboxContent() {
   const loadMessages = async () => {
     try {
       setIsLoading(true)
+      console.log('📥 Loading messages from database...')
+
       const { data, error } = await supabase
         .from('team_messages')
         .select('*')
         .order('created_at', { ascending: true })
 
-      if (error) throw error
-      setMessages(data || [])
-      
+      if (error) {
+        console.log('⚠️ Database query failed:', error)
+        // Try to load from localStorage as fallback
+        const cachedMessages = localStorage.getItem('team_messages')
+        if (cachedMessages) {
+          const parsed = JSON.parse(cachedMessages)
+          setMessages(parsed)
+          console.log('📦 Loaded', parsed.length, 'messages from cache')
+        } else {
+          // Set demo messages if no cache
+          const demoMessages: Message[] = [
+            {
+              id: 'demo-1',
+              content: 'Welcome to the team inbox! This is where team communication happens.',
+              sender_id: 'system',
+              sender_name: 'System',
+              sender_email: 'system@changeMechanics.com',
+              created_at: new Date(Date.now() - 60000).toISOString(),
+              is_read: false,
+              message_type: 'system'
+            }
+          ]
+          setMessages(demoMessages)
+          console.log('📝 Set demo messages')
+        }
+      } else {
+        setMessages(data || [])
+        // Cache messages in localStorage
+        localStorage.setItem('team_messages', JSON.stringify(data || []))
+        console.log('✅ Loaded', data?.length || 0, 'messages from database')
+      }
+
       // Count unread messages
-      const unread = data?.filter(msg => !msg.is_read && msg.sender_id !== user?.id).length || 0
+      const currentMessages = data || JSON.parse(localStorage.getItem('team_messages') || '[]')
+      const unread = currentMessages.filter((msg: Message) => !msg.is_read && msg.sender_id !== user?.id).length || 0
       setUnreadCount(unread)
+      setUnreadMessageCount(unread)
+      console.log('📊 Unread messages:', unread)
+
     } catch (error: any) {
-      console.error('Error loading messages:', error)
+      console.error('❌ Error loading messages:', error)
       toast({
         title: "Error",
-        description: "Failed to load messages",
+        description: "Failed to load messages. Using cached data if available.",
         variant: "destructive"
       })
     } finally {
@@ -154,7 +240,12 @@ function TeamInboxContent() {
         }
 
         console.log('✅ Message saved to database:', data)
-        setMessages(prev => [...prev, data])
+        setMessages(prev => {
+          const updated = [...prev, data]
+          // Update cache
+          localStorage.setItem('team_messages', JSON.stringify(updated))
+          return updated
+        })
       } catch (dbError) {
         console.log('⚠️ Database save failed, adding to local state:', dbError)
 
@@ -166,7 +257,12 @@ function TeamInboxContent() {
           message_type: 'text' as const
         }
 
-        setMessages(prev => [...prev, localMessage])
+        setMessages(prev => {
+          const updated = [...prev, localMessage]
+          // Update cache
+          localStorage.setItem('team_messages', JSON.stringify(updated))
+          return updated
+        })
         console.log('📝 Message added to local state:', localMessage)
       }
 

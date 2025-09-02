@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
 import { useLanguage } from '@/lib/language-context'
+import { useInbox } from '@/lib/inbox-context'
+import { Badge } from '@/components/ui/badge'
 
 interface SidebarProps {
   activeTab: string
@@ -103,6 +105,7 @@ const navigationItems = [
 export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isCollapsed, onToggleCollapse }: SidebarProps) {
   const { theme } = useTheme()
   const { t } = useLanguage()
+  const { unreadMessageCount } = useInbox()
   const filteredItems = navigationItems.filter(item => 
     !item.adminOnly || userRole === 'admin'
   )
@@ -151,7 +154,7 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
           "fixed left-0 top-0 z-50 h-full transform transition-all duration-300 ease-in-out",
           theme === 'dark' ? "sidebar-dark" : "sidebar-light",
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-          isCollapsed ? "w-16" : "w-80"
+          isCollapsed ? "w-20" : "w-80"
         )}
       >
         <div className="flex h-full flex-col overflow-hidden">
@@ -209,29 +212,46 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
                   }}
                   className={cn(
                     "w-full flex items-center rounded-lg text-left transition-all duration-200 hover:bg-accent",
-                    isCollapsed 
-                      ? "justify-center px-2 py-3" 
+                    isCollapsed
+                      ? "justify-center px-3 py-4"
                       : "space-x-3 px-4 py-3",
-                    isActive 
-                      ? "bg-primary text-primary-foreground shadow-md" 
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-md"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   title={isCollapsed ? item.label : undefined}
                 >
-                  <Icon
-                    className={cn(
-                      isActive ? "text-primary-foreground" : "text-muted-foreground"
+                  <div className="relative">
+                    <Icon
+                      className={cn(
+                        isActive ? "text-primary-foreground" : "text-muted-foreground"
+                      )}
+                      style={{
+                        width: isCollapsed ? '24px' : '20px',
+                        height: isCollapsed ? '24px' : '20px'
+                      }}
+                    />
+                    {item.id === 'inbox' && unreadMessageCount > 0 && (
+                      <Badge
+                        variant="destructive"
+                        className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                      >
+                        {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                      </Badge>
                     )}
-                    style={{
-                      width: isCollapsed ? '20px' : '20px',
-                      height: isCollapsed ? '20px' : '20px'
-                    }}
-                  />
+                  </div>
                   {!isCollapsed && (
                     <div className="flex-1">
-                      <div className="font-medium">{item.label}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium">{item.label}</div>
+                        {item.id === 'inbox' && unreadMessageCount > 0 && (
+                          <Badge variant="destructive" className="ml-2">
+                            {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                          </Badge>
+                        )}
+                      </div>
                       <div className="text-xs opacity-70">{item.description}</div>
                     </div>
                   )}
@@ -251,38 +271,38 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
             >
               <Plus
                 style={{
-                  width: isCollapsed ? '18px' : '16px',
-                  height: isCollapsed ? '18px' : '16px'
+                  width: isCollapsed ? '22px' : '16px',
+                  height: isCollapsed ? '22px' : '16px'
                 }}
               />
               {!isCollapsed && <span className="ml-2">{t('newTask')}</span>}
             </Button>
 
             <Button
-              className={cn("w-full", isCollapsed ? "px-2" : "")}
+              className={cn("w-full", isCollapsed ? "px-3" : "")}
               variant="outline"
               title={isCollapsed ? t('newProject') : undefined}
               onClick={handleNewProject}
             >
               <FolderOpen
                 style={{
-                  width: isCollapsed ? '18px' : '16px',
-                  height: isCollapsed ? '18px' : '16px'
+                  width: isCollapsed ? '22px' : '16px',
+                  height: isCollapsed ? '22px' : '16px'
                 }}
               />
               {!isCollapsed && <span className="ml-2">{t('newProject')}</span>}
             </Button>
 
             <Button
-              className={cn("w-full", isCollapsed ? "px-2" : "")}
+              className={cn("w-full", isCollapsed ? "px-3" : "")}
               variant="outline"
               title={isCollapsed ? "Schedule Event" : undefined}
               onClick={handleScheduleEvent}
             >
               <Calendar
                 style={{
-                  width: isCollapsed ? '18px' : '16px',
-                  height: isCollapsed ? '18px' : '16px'
+                  width: isCollapsed ? '22px' : '16px',
+                  height: isCollapsed ? '22px' : '16px'
                 }}
               />
               {!isCollapsed && <span className="ml-2">Schedule Event</span>}

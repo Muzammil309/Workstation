@@ -11,21 +11,15 @@ import {
   CheckCircle,
   Clock,
   Trash2,
-  Mail
+  Mail,
+  Volume2,
+  VolumeX
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-
-interface Notification {
-  id: string
-  title: string
-  message: string
-  type: 'info' | 'success' | 'warning' | 'error'
-  timestamp: string
-  isRead: boolean
-  actionUrl?: string
-}
+import { useNotifications } from '@/lib/notification-context'
+import { Notification } from '@/lib/notification-service'
 
 interface NotificationDropdownProps {
   className?: string
@@ -33,43 +27,18 @@ interface NotificationDropdownProps {
 
 export function NotificationDropdown({ className }: NotificationDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      title: 'Task Assigned',
-      message: 'You have been assigned to "Project Setup" task',
-      type: 'info',
-      timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-      isRead: false
-    },
-    {
-      id: '2',
-      title: 'Deadline Approaching',
-      message: 'Task "Design Review" is due in 2 hours',
-      type: 'warning',
-      timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-      isRead: false
-    },
-    {
-      id: '3',
-      title: 'Task Completed',
-      message: 'John completed "Database Migration" task',
-      type: 'success',
-      timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-      isRead: true
-    },
-    {
-      id: '4',
-      title: 'System Update',
-      message: 'New features have been added to the dashboard',
-      type: 'info',
-      timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-      isRead: true
-    }
-  ])
-
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAsUnread,
+    deleteNotification,
+    markAllAsRead,
+    clearAll,
+    soundEnabled,
+    setSoundEnabled
+  } = useNotifications()
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const unreadCount = notifications.filter(n => !n.isRead).length
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -82,34 +51,6 @@ export function NotificationDropdown({ className }: NotificationDropdownProps) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-
-  const markAsRead = (notificationId: string) => {
-    setNotifications(prev => prev.map(notification =>
-      notification.id === notificationId
-        ? { ...notification, isRead: true }
-        : notification
-    ))
-  }
-
-  const markAsUnread = (notificationId: string) => {
-    setNotifications(prev => prev.map(notification =>
-      notification.id === notificationId
-        ? { ...notification, isRead: false }
-        : notification
-    ))
-  }
-
-  const deleteNotification = (notificationId: string) => {
-    setNotifications(prev => prev.filter(notification => notification.id !== notificationId))
-  }
-
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(notification => ({ ...notification, isRead: true })))
-  }
-
-  const clearAll = () => {
-    setNotifications([])
-  }
 
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
@@ -176,6 +117,15 @@ export function NotificationDropdown({ className }: NotificationDropdownProps) {
                 )}
               </h3>
               <div className="flex items-center space-x-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  title={soundEnabled ? "Disable sound" : "Enable sound"}
+                  className="text-xs"
+                >
+                  {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                </Button>
                 {unreadCount > 0 && (
                   <Button
                     variant="ghost"

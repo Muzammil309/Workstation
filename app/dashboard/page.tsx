@@ -22,6 +22,8 @@ import { IntegrationsPanel } from '@/components/dashboard/integrations-panel'
 import { ProfilePanel } from '@/components/dashboard/profile-panel'
 import { useAuth } from '@/hooks/use-auth'
 import { LanguageProvider } from '@/lib/language-context'
+import { NotificationProvider } from '@/lib/notification-context'
+import { InboxProvider } from '@/lib/inbox-context'
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('tasks')
@@ -124,7 +126,9 @@ export default function DashboardPage() {
 
   return (
     <LanguageProvider>
-      <div className="min-h-screen bg-background flex">
+      <NotificationProvider>
+        <InboxProvider>
+          <div className="min-h-screen bg-background flex">
         {/* Sidebar */}
         <Sidebar
           activeTab={activeTab}
@@ -139,7 +143,7 @@ export default function DashboardPage() {
         {/* Main Content */}
         <div className={cn(
           "flex-1 flex flex-col transition-all duration-300 ease-in-out",
-          isSidebarCollapsed ? "ml-16" : "ml-80"
+          isSidebarCollapsed ? "ml-20" : "ml-80"
         )}>
           <DashboardHeader
             user={{
@@ -165,6 +169,8 @@ export default function DashboardPage() {
           </main>
         </div>
       </div>
+        </InboxProvider>
+      </NotificationProvider>
     </LanguageProvider>
   )
 }
