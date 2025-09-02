@@ -72,10 +72,10 @@ function TodoListContent() {
         throw new Error('User ID is required to load tasks')
       }
 
-      console.log('🔍 Loading comprehensive tasks for user:', user.id)
+      console.log('🔍 Loading comprehensive tasks for user:', user.id, 'with email:', user.email)
 
       // Run multiple queries in parallel to get ALL tasks user should see
-      const [assignedTasksResult, createdTasksResult, containsTasksResult] = await Promise.allSettled([
+      const [assignedTasksResult, createdTasksResult, containsTasksResult, emailAssignedResult] = await Promise.allSettled([
         // Query 1: Tasks where user is in assignees array (using overlaps - most reliable)
         supabase
           .from('tasks')
@@ -95,6 +95,13 @@ function TodoListContent() {
           .from('tasks')
           .select('*')
           .contains('assignees', [user.id])
+          .order('created_at', { ascending: false }),
+
+        // Query 4: Tasks assigned by email (for team assignments)
+        supabase
+          .from('tasks')
+          .select('*')
+          .or(`assignees.cs.{${user.id}},assignees.cs.{${user.email}}`)
           .order('created_at', { ascending: false })
       ])
 
@@ -126,6 +133,15 @@ function TodoListContent() {
         console.log('🔍 Found', containsTasks.length, 'tasks (contains method)')
       } else {
         console.log('🔍 Contains tasks query failed:', containsTasksResult.status === 'fulfilled' ? containsTasksResult.value.error : containsTasksResult.reason)
+      }
+
+      // Process email assigned tasks (team assignments)
+      if (emailAssignedResult.status === 'fulfilled' && !emailAssignedResult.value.error) {
+        const emailTasks = emailAssignedResult.value.data || []
+        allTasks.push(...emailTasks)
+        console.log('🔍 Found', emailTasks.length, 'email/team assigned tasks')
+      } else {
+        console.log('🔍 Email assigned tasks query failed:', emailAssignedResult.status === 'fulfilled' ? emailAssignedResult.value.error : emailAssignedResult.reason)
       }
 
       // Remove duplicates by task ID

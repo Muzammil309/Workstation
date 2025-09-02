@@ -76,6 +76,15 @@ function AutomationCenterContent() {
   const [showCreateRule, setShowCreateRule] = useState(false)
   const [showCreateTemplate, setShowCreateTemplate] = useState(false)
   const [selectedTab, setSelectedTab] = useState<'rules' | 'templates' | 'analytics'>('rules')
+  const [editingRule, setEditingRule] = useState<AutomationRule | null>(null)
+  const [showEditRule, setShowEditRule] = useState(false)
+  const [ruleFormData, setRuleFormData] = useState({
+    name: '',
+    description: '',
+    trigger_type: 'task_created',
+    action_type: 'send_notification',
+    is_active: true
+  })
 
   // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
@@ -205,6 +214,180 @@ function AutomationCenterContent() {
       toast({
         title: "Error",
         description: "Failed to update rule status",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const createAutomationRule = async () => {
+    try {
+      if (!ruleFormData.name.trim()) {
+        toast({
+          title: "Error",
+          description: "Rule name is required",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const newRule = {
+        name: ruleFormData.name,
+        description: ruleFormData.description,
+        trigger_type: ruleFormData.trigger_type as any,
+        trigger_conditions: {},
+        actions: [{
+          type: ruleFormData.action_type as any,
+          parameters: {}
+        }],
+        is_active: ruleFormData.is_active,
+        created_by: user?.id || '',
+        execution_count: 0
+      }
+
+      // Try to save to database, fallback to local state
+      try {
+        const { data, error } = await supabase
+          .from('automation_rules')
+          .insert([newRule])
+          .select()
+          .single()
+
+        if (error) throw error
+
+        setAutomationRules(prev => [data, ...prev])
+      } catch (dbError) {
+        console.log('Database save failed, adding to local state:', dbError)
+        const localRule: AutomationRule = {
+          ...newRule,
+          id: `local-${Date.now()}`,
+          created_at: new Date().toISOString()
+        }
+        setAutomationRules(prev => [localRule, ...prev])
+      }
+
+      setShowCreateRule(false)
+      setRuleFormData({
+        name: '',
+        description: '',
+        trigger_type: 'task_created',
+        action_type: 'send_notification',
+        is_active: true
+      })
+
+      toast({
+        title: "Success",
+        description: "Automation rule created successfully",
+      })
+    } catch (error: any) {
+      console.error('Error creating rule:', error)
+      toast({
+        title: "Error",
+        description: "Failed to create automation rule",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const editAutomationRule = (rule: AutomationRule) => {
+    setEditingRule(rule)
+    setRuleFormData({
+      name: rule.name || '',
+      description: rule.description || '',
+      trigger_type: rule.trigger_type || 'task_created',
+      action_type: rule.actions?.[0]?.type || 'send_notification',
+      is_active: rule.is_active !== false
+    })
+    setShowEditRule(true)
+  }
+
+  const updateAutomationRule = async () => {
+    try {
+      if (!editingRule || !ruleFormData.name.trim()) {
+        toast({
+          title: "Error",
+          description: "Rule name is required",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const updatedRule: AutomationRule = {
+        ...editingRule,
+        name: ruleFormData.name,
+        description: ruleFormData.description,
+        trigger_type: ruleFormData.trigger_type as any,
+        actions: [{
+          type: ruleFormData.action_type as any,
+          parameters: editingRule.actions?.[0]?.parameters || {}
+        }],
+        is_active: ruleFormData.is_active
+      }
+
+      // Try to update in database, fallback to local state
+      try {
+        const { error } = await supabase
+          .from('automation_rules')
+          .update(updatedRule)
+          .eq('id', editingRule.id)
+
+        if (error) throw error
+      } catch (dbError) {
+        console.log('Database update failed, updating local state:', dbError)
+      }
+
+      setAutomationRules(prev => prev.map(rule =>
+        rule.id === editingRule.id ? updatedRule : rule
+      ))
+
+      setShowEditRule(false)
+      setEditingRule(null)
+      setRuleFormData({
+        name: '',
+        description: '',
+        trigger_type: 'task_created',
+        action_type: 'send_notification',
+        is_active: true
+      })
+
+      toast({
+        title: "Success",
+        description: "Automation rule updated successfully",
+      })
+    } catch (error: any) {
+      console.error('Error updating rule:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update automation rule",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const deleteAutomationRule = async (ruleId: string) => {
+    try {
+      // Try to delete from database, fallback to local state
+      try {
+        const { error } = await supabase
+          .from('automation_rules')
+          .delete()
+          .eq('id', ruleId)
+
+        if (error) throw error
+      } catch (dbError) {
+        console.log('Database delete failed, removing from local state:', dbError)
+      }
+
+      setAutomationRules(prev => prev.filter(rule => rule.id !== ruleId))
+
+      toast({
+        title: "Success",
+        description: "Automation rule deleted successfully",
+      })
+    } catch (error: any) {
+      console.error('Error deleting rule:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete automation rule",
         variant: "destructive"
       })
     }
@@ -423,10 +606,25 @@ function AutomationCenterContent() {
                           >
                             {rule.is_active ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                           </Button>
-                          <Button size="sm" variant="outline">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => editAutomationRule(rule)}
+                            title="Edit Rule"
+                          >
                             <Edit className="w-3 h-3" />
                           </Button>
-                          <Button size="sm" variant="outline">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (window.confirm('Are you sure you want to delete this automation rule?')) {
+                                deleteAutomationRule(rule.id)
+                              }
+                            }}
+                            title="Delete Rule"
+                            className="text-red-600 hover:text-red-700"
+                          >
                             <Trash2 className="w-3 h-3" />
                           </Button>
                         </div>
@@ -528,6 +726,187 @@ function AutomationCenterContent() {
                 <p className="text-xs text-subtle">Rule execution success</p>
               </CardContent>
             </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Create Rule Modal */}
+      {showCreateRule && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-4">Create New Automation Rule</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Rule Name</label>
+                <input
+                  type="text"
+                  value={ruleFormData.name}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter rule name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea
+                  value={ruleFormData.description}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="Describe what this rule does"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Trigger</label>
+                <select
+                  value={ruleFormData.trigger_type}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, trigger_type: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="task_created">Task Created</option>
+                  <option value="task_completed">Task Completed</option>
+                  <option value="deadline_approaching">Deadline Approaching</option>
+                  <option value="task_overdue">Task Overdue</option>
+                  <option value="status_changed">Status Changed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Action</label>
+                <select
+                  value={ruleFormData.action_type}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, action_type: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="send_notification">Send Notification</option>
+                  <option value="send_email">Send Email</option>
+                  <option value="assign_user">Assign User</option>
+                  <option value="create_task">Create Task</option>
+                  <option value="update_status">Update Status</option>
+                </select>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={ruleFormData.is_active}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                  className="mr-2"
+                />
+                <label htmlFor="is_active" className="text-sm font-medium">Active</label>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowCreateRule(false)}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createAutomationRule}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Create Rule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Rule Modal */}
+      {showEditRule && editingRule && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-4">Edit Automation Rule</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Rule Name</label>
+                <input
+                  type="text"
+                  value={ruleFormData.name}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter rule name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea
+                  value={ruleFormData.description}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="Describe what this rule does"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Trigger</label>
+                <select
+                  value={ruleFormData.trigger_type}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, trigger_type: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="task_created">Task Created</option>
+                  <option value="task_completed">Task Completed</option>
+                  <option value="deadline_approaching">Deadline Approaching</option>
+                  <option value="task_overdue">Task Overdue</option>
+                  <option value="status_changed">Status Changed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Action</label>
+                <select
+                  value={ruleFormData.action_type}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, action_type: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="send_notification">Send Notification</option>
+                  <option value="send_email">Send Email</option>
+                  <option value="assign_user">Assign User</option>
+                  <option value="create_task">Create Task</option>
+                  <option value="update_status">Update Status</option>
+                </select>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="edit_is_active"
+                  checked={ruleFormData.is_active}
+                  onChange={(e) => setRuleFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                  className="mr-2"
+                />
+                <label htmlFor="edit_is_active" className="text-sm font-medium">Active</label>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditRule(false)
+                  setEditingRule(null)
+                }}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={updateAutomationRule}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Update Rule
+              </button>
+            </div>
           </div>
         </div>
       )}

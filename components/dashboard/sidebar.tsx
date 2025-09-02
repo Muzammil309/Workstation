@@ -220,10 +220,15 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
                   whileTap={{ scale: 0.98 }}
                   title={isCollapsed ? item.label : undefined}
                 >
-                  <Icon className={cn(
-                    isCollapsed ? "h-7 w-7" : "h-5 w-5",
-                    isActive ? "text-primary-foreground" : "text-muted-foreground"
-                  )} />
+                  <Icon
+                    className={cn(
+                      isActive ? "text-primary-foreground" : "text-muted-foreground"
+                    )}
+                    style={{
+                      width: isCollapsed ? '15px' : '20px',
+                      height: isCollapsed ? '15px' : '20px'
+                    }}
+                  />
                   {!isCollapsed && (
                     <div className="flex-1">
                       <div className="font-medium">{item.label}</div>
@@ -244,7 +249,12 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
               title={isCollapsed ? t('newTask') : undefined}
               onClick={handleNewTask}
             >
-              <Plus className={cn(isCollapsed ? "h-6 w-6" : "h-4 w-4")} />
+              <Plus
+                style={{
+                  width: isCollapsed ? '15px' : '16px',
+                  height: isCollapsed ? '15px' : '16px'
+                }}
+              />
               {!isCollapsed && <span className="ml-2">{t('newTask')}</span>}
             </Button>
 
@@ -254,7 +264,12 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
               title={isCollapsed ? t('newProject') : undefined}
               onClick={handleNewProject}
             >
-              <FolderOpen className={cn(isCollapsed ? "h-6 w-6" : "h-4 w-4")} />
+              <FolderOpen
+                style={{
+                  width: isCollapsed ? '15px' : '16px',
+                  height: isCollapsed ? '15px' : '16px'
+                }}
+              />
               {!isCollapsed && <span className="ml-2">{t('newProject')}</span>}
             </Button>
 
@@ -264,7 +279,12 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
               title={isCollapsed ? "Schedule Event" : undefined}
               onClick={handleScheduleEvent}
             >
-              <Calendar className={cn(isCollapsed ? "h-6 w-6" : "h-4 w-4")} />
+              <Calendar
+                style={{
+                  width: isCollapsed ? '15px' : '16px',
+                  height: isCollapsed ? '15px' : '16px'
+                }}
+              />
               {!isCollapsed && <span className="ml-2">Schedule Event</span>}
             </Button>
             
