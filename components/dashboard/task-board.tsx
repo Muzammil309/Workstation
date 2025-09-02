@@ -1430,10 +1430,14 @@ function SortableTaskCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`relative bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 group transition-all duration-300 backdrop-blur-sm cursor-grab active:cursor-grabbing ${
+      className={`relative p-5 rounded-xl group transition-all duration-300 backdrop-blur-sm cursor-grab active:cursor-grabbing ${
         isDragging
-          ? 'shadow-2xl scale-105 rotate-2 border-neon-blue/70 bg-white/95 dark:bg-gray-800/95 z-50 ring-2 ring-neon-blue/50'
+          ? 'shadow-2xl scale-105 rotate-2 border-neon-blue/70 z-50 ring-2 ring-neon-blue/50'
           : 'hover:shadow-xl hover:scale-[1.02] hover:border-neon-blue/50'
+      } task-card-light dark:task-card-dark ${
+        task.priority === 'high' ? 'priority-high' :
+        task.priority === 'medium' ? 'priority-medium' :
+        'priority-low'
       }`}
     >
       {/* Drag Handle Visual Indicator */}
@@ -1456,7 +1460,7 @@ function SortableTaskCard({
         
         {/* Task Description */}
         {task.description && (
-          <p className="text-gray-600 dark:text-gray-300 text-xs md:text-sm leading-relaxed line-clamp-2 bg-gray-50 dark:bg-gray-700/50 p-2 md:p-3 rounded-lg">
+          <p className="text-subtle text-xs md:text-sm leading-relaxed line-clamp-2 surface-2 p-2 md:p-3 rounded-lg border-subtle border">
             {task.description}
           </p>
         )}

@@ -12,6 +12,9 @@ import { ProjectsPanel } from '@/components/dashboard/projects-panel'
 import { CalendarView } from '@/components/dashboard/calendar-view'
 import { TeamManagement } from '@/components/dashboard/team-management'
 import { ReportsPanel } from '@/components/dashboard/reports-panel'
+import { TodoList } from '@/components/dashboard/todo-list'
+import { TeamInbox } from '@/components/dashboard/team-inbox'
+import { Whiteboard } from '@/components/dashboard/whiteboard'
 
 import { IntegrationsPanel } from '@/components/dashboard/integrations-panel'
 import { ProfilePanel } from '@/components/dashboard/profile-panel'
@@ -83,6 +86,12 @@ export default function DashboardPage() {
             <TaskBoard />
           </div>
         )
+      case 'todo':
+        return <TodoList />
+      case 'inbox':
+        return <TeamInbox />
+      case 'whiteboard':
+        return <Whiteboard />
       case 'projects':
         return <ProjectsPanel />
       case 'calendar':

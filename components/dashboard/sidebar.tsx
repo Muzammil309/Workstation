@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User } from 'lucide-react'
+import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User, ListTodo, MessageSquare, PenTool } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
@@ -23,6 +23,24 @@ const navigationItems = [
     label: 'Task Board',
     icon: CheckSquare,
     description: 'Manage and track tasks'
+  },
+  {
+    id: 'todo',
+    label: 'To-do List',
+    icon: ListTodo,
+    description: 'My personal tasks'
+  },
+  {
+    id: 'inbox',
+    label: 'Inbox',
+    icon: MessageSquare,
+    description: 'Team messages & notifications'
+  },
+  {
+    id: 'whiteboard',
+    label: 'Whiteboard',
+    icon: PenTool,
+    description: 'Collaborative drawing & planning'
   },
   {
     id: 'projects',
@@ -124,7 +142,8 @@ export function Sidebar({ activeTab, onTabChange, isOpen, onClose, userRole, isC
         animate={{ x: isOpen ? 0 : -300 }}
         transition={{ type: "spring", damping: 20 }}
         className={cn(
-          "fixed left-0 top-0 z-50 h-full bg-background border-r shadow-lg transform transition-all duration-300 ease-in-out",
+          "fixed left-0 top-0 z-50 h-full transform transition-all duration-300 ease-in-out",
+          theme === 'dark' ? "sidebar-dark" : "sidebar-light",
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           isCollapsed ? "w-16" : "w-80"
         )}

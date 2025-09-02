@@ -4,24 +4,25 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
+    /* ClickUp-inspired light theme with better contrast */
+    --background: 210 20% 98%;
     --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 96%;
+    --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 96%;
+    --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 94%;
+    --secondary: 210 40% 96%;
     --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 94%;
+    --muted: 210 40% 96%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 94%;
+    --accent: 210 40% 96%;
     --accent-foreground: 222.2 84% 4.9%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 88%;
-    --input: 214.3 31.8% 88%;
+    --border: 214.3 31.8% 91%;
+    --input: 214.3 31.8% 91%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
     --neon-blue: 190 100% 50%;
@@ -30,6 +31,15 @@
     --neon-purple: 280 100% 50%;
     --neon-orange: 30 100% 50%;
     --neon-yellow: 60 100% 50%;
+
+    /* Enhanced light theme variables */
+    --sidebar-bg: 0 0% 100%;
+    --sidebar-border: 214.3 31.8% 91%;
+    --column-bg: 210 20% 97%;
+    --column-border: 214.3 31.8% 88%;
+    --task-card-bg: 0 0% 100%;
+    --task-card-border: 214.3 31.8% 85%;
+    --task-card-hover: 210 20% 99%;
   }
 
   .dark {
@@ -52,6 +62,15 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
+
+    /* Enhanced dark theme variables */
+    --sidebar-bg: 222.2 84% 4.9%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --column-bg: 217.2 32.6% 8%;
+    --column-border: 217.2 32.6% 17.5%;
+    --task-card-bg: 217.2 32.6% 12%;
+    --task-card-border: 217.2 32.6% 20%;
+    --task-card-hover: 217.2 32.6% 15%;
   }
 }
 
@@ -69,45 +88,80 @@
   .glass-card {
     @apply bg-white/10 backdrop-blur-md border border-white/20 shadow-xl dark:bg-white/10 dark:border-white/20;
   }
-  
+
   .glass-card-light {
     @apply bg-gray-50/80 backdrop-blur-md border border-gray-200/60 shadow-xl;
   }
-  
+
   .glass-card-dark {
     @apply bg-black/10 backdrop-blur-md border border-white/10 shadow-xl;
   }
-  
+
   .neon-border {
     @apply border border-neon-blue/50 shadow-[0_0_10px_rgba(0,212,255,0.3)];
   }
-  
+
   .neon-glow {
     @apply shadow-[0_0_20px_rgba(0,212,255,0.5)];
   }
-  
+
   .gradient-bg {
     @apply bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900;
   }
-  
+
   .gradient-text {
     @apply bg-gradient-to-r from-neon-blue to-neon-purple bg-clip-text text-transparent;
   }
-  
+
+  /* Enhanced task card styles with better contrast */
   .task-card-light {
-    @apply bg-gray-50/90 border border-gray-200/60 hover:border-gray-300/80 hover:bg-gray-100/90;
+    background: hsl(var(--task-card-bg));
+    border: 1px solid hsl(var(--task-card-border));
+    @apply shadow-sm hover:shadow-md transition-all duration-200;
   }
-  
+
+  .task-card-light:hover {
+    background: hsl(var(--task-card-hover));
+    border-color: hsl(var(--task-card-border));
+    @apply shadow-lg transform -translate-y-0.5;
+  }
+
   .task-card-dark {
-    @apply bg-white/10 border border-white/10 hover:border-white/20 hover:bg-white/15;
+    background: hsl(var(--task-card-bg));
+    border: 1px solid hsl(var(--task-card-border));
+    @apply shadow-sm hover:shadow-md transition-all duration-200;
   }
-  
+
+  .task-card-dark:hover {
+    background: hsl(var(--task-card-hover));
+    border-color: hsl(var(--task-card-border));
+    @apply shadow-lg transform -translate-y-0.5;
+  }
+
+  /* Enhanced column styles */
   .column-light {
-    @apply bg-gray-50/80 border border-gray-200/60;
+    background: hsl(var(--column-bg));
+    border: 1px solid hsl(var(--column-border));
+    @apply shadow-sm;
   }
-  
+
   .column-dark {
-    @apply bg-white/5 border border-white/10;
+    background: hsl(var(--column-bg));
+    border: 1px solid hsl(var(--column-border));
+    @apply shadow-sm;
+  }
+
+  /* Sidebar styles */
+  .sidebar-light {
+    background: hsl(var(--sidebar-bg));
+    border-right: 1px solid hsl(var(--sidebar-border));
+    @apply shadow-sm;
+  }
+
+  .sidebar-dark {
+    background: hsl(var(--sidebar-bg));
+    border-right: 1px solid hsl(var(--sidebar-border));
+    @apply shadow-sm;
   }
 }
 
@@ -161,10 +215,59 @@ div:has(> span:contains("Testing Database Connection")) {
   cursor: grabbing;
 }
 
-/* Task card hover effects */
-.task-card-light:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+/* Enhanced visual hierarchy utilities */
+.surface-1 {
+  background: hsl(var(--background));
+}
+
+.surface-2 {
+  background: hsl(var(--muted));
+}
+
+.surface-3 {
+  background: hsl(var(--card));
+}
+
+.border-subtle {
+  border-color: hsl(var(--border));
+}
+
+.border-emphasis {
+  border-color: hsl(var(--muted-foreground) / 0.3);
+}
+
+.text-emphasis {
+  color: hsl(var(--foreground));
+}
+
+.text-subtle {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Priority color indicators */
+.priority-high {
+  @apply border-l-4 border-red-500 bg-red-50 dark:bg-red-950/20;
+}
+
+.priority-medium {
+  @apply border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20;
+}
+
+.priority-low {
+  @apply border-l-4 border-green-500 bg-green-50 dark:bg-green-950/20;
+}
+
+/* Status indicators */
+.status-pending {
+  @apply bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200;
+}
+
+.status-in-progress {
+  @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200;
+}
+
+.status-completed {
+  @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200;
 }
 
 .task-card-dark:hover {
