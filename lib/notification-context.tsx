@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { notificationService, Notification, NotificationEvent } from './notification-service'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -32,6 +32,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [soundEnabled, setSoundEnabledState] = useState(true)
   const { user } = useAuth()
+  const isMountedRef = useRef(true)
 
   const loadNotifications = useCallback(async () => {
     if (!user?.id) return
@@ -53,13 +54,23 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       const unsubscribe = notificationService.subscribeToNotifications(
         user.id,
         (notification) => {
-          setNotifications(prev => [notification, ...prev])
+          // Only update state if component is still mounted
+          if (isMountedRef.current) {
+            setNotifications(prev => [notification, ...prev])
+          }
         }
       )
 
       return unsubscribe
     }
   }, [user?.id, loadNotifications])
+
+  // Cleanup effect to prevent state updates after unmounting
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   const addNotification = async (event: NotificationEvent) => {
     if (!user?.id) return

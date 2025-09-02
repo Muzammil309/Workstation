@@ -51,6 +51,7 @@ function TeamInboxContent() {
   const [chatMode, setChatMode] = useState<'team' | 'individual'>('team')
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [individualMessages, setIndividualMessages] = useState<Record<string, Message[]>>({})
+  const isMountedRef = useRef(true)
 
   // ✅ Load messages from cache immediately on mount
   useEffect(() => {
@@ -95,42 +96,45 @@ function TeamInboxContent() {
           console.log('📨 New message received:', payload.new)
           const newMessage = payload.new as Message
 
-          // Add message to state and cache
-          setMessages(prev => {
-            // Prevent duplicates
-            if (prev.find(m => m.id === newMessage.id)) {
-              return prev
-            }
-            const updated = [...prev, newMessage].sort((a, b) =>
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            )
-            // Immediately cache the updated messages
-            localStorage.setItem('team_messages', JSON.stringify(updated))
-            return updated
-          })
-
-          // If message is from another user, trigger notification
-          if (newMessage.sender_id !== user?.id) {
-            setUnreadCount(prev => {
-              const newCount = prev + 1
-              setUnreadMessageCount(newCount)
-              return newCount
+          // Only update state if component is still mounted
+          if (isMountedRef.current) {
+            // Add message to state and cache
+            setMessages(prev => {
+              // Prevent duplicates
+              if (prev.find(m => m.id === newMessage.id)) {
+                return prev
+              }
+              const updated = [...prev, newMessage].sort((a, b) =>
+                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              )
+              // Immediately cache the updated messages
+              localStorage.setItem('team_messages', JSON.stringify(updated))
+              return updated
             })
 
-            // Trigger notification through our notification system
-            try {
-              notifyMessageReceived(
-                newMessage.sender_name,
-                newMessage.content.substring(0, 50) + (newMessage.content.length > 50 ? '...' : '')
-              )
+            // If message is from another user, trigger notification
+            if (newMessage.sender_id !== user?.id) {
+              setUnreadCount(prev => {
+                const newCount = prev + 1
+                setUnreadMessageCount(newCount)
+                return newCount
+              })
 
-              // Also show legacy notification
-              showNotification(
-                `New message from ${newMessage.sender_name}`,
-                newMessage.content.substring(0, 100) + (newMessage.content.length > 100 ? '...' : '')
-              )
-            } catch (error) {
-              console.error('Failed to trigger message notification:', error)
+              // Trigger notification through our notification system
+              try {
+                notifyMessageReceived(
+                  newMessage.sender_name,
+                  newMessage.content.substring(0, 50) + (newMessage.content.length > 50 ? '...' : '')
+                )
+
+                // Also show legacy notification
+                showNotification(
+                  `New message from ${newMessage.sender_name}`,
+                  newMessage.content.substring(0, 100) + (newMessage.content.length > 100 ? '...' : '')
+                )
+              } catch (error) {
+                console.error('Failed to trigger message notification:', error)
+              }
             }
           }
         }
@@ -140,19 +144,25 @@ function TeamInboxContent() {
         (payload) => {
           console.log('📝 Message updated:', payload.new)
           const updatedMessage = payload.new as Message
-          setMessages(prev => {
-            const updated = prev.map(msg =>
-              msg.id === updatedMessage.id ? updatedMessage : msg
-            )
-            // Cache the updated messages
-            localStorage.setItem('team_messages', JSON.stringify(updated))
-            return updated
-          })
+          // Only update state if component is still mounted
+          if (isMountedRef.current) {
+            setMessages(prev => {
+              const updated = prev.map(msg =>
+                msg.id === updatedMessage.id ? updatedMessage : msg
+              )
+              // Cache the updated messages
+              localStorage.setItem('team_messages', JSON.stringify(updated))
+              return updated
+            })
+          }
         }
       )
       .subscribe((status) => {
         console.log('📡 Subscription status:', status)
-        setIsConnected(status === 'SUBSCRIBED')
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setIsConnected(status === 'SUBSCRIBED')
+        }
       })
 
     return () => {
@@ -179,9 +189,10 @@ function TeamInboxContent() {
     }
   }, [messages])
 
-  // Cleanup: Save messages on unmount
+  // Cleanup: Save messages on unmount and set mounted ref
   useEffect(() => {
     return () => {
+      isMountedRef.current = false
       // Use a ref to get the latest messages value
       const currentMessages = JSON.parse(localStorage.getItem('team_messages') || '[]')
       if (currentMessages.length > 0) {

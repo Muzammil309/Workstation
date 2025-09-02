@@ -74,6 +74,7 @@ function WhiteboardContent() {
   const [users, setUsers] = useState<any[]>([])
   const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null)
   const [isCollaborating, setIsCollaborating] = useState(false)
+  const isMountedRef = useRef(true)
 
   const colors = [
     '#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00',
@@ -99,7 +100,8 @@ function WhiteboardContent() {
     initializeWhiteboard()
 
     return () => {
-      // Cleanup subscription on unmount
+      // Set mounted ref to false and cleanup subscription on unmount
+      isMountedRef.current = false
       supabase.removeAllChannels()
     }
   }, [])
@@ -141,15 +143,19 @@ function WhiteboardContent() {
           console.log('🎨 New whiteboard element received:', payload.new)
           const newElement = payload.new as DrawingElement
 
-          // Only add if it's from another user
-          if (newElement.created_by !== user?.id) {
+          // Only add if it's from another user and component is mounted
+          if (newElement.created_by !== user?.id && isMountedRef.current) {
             setElements(prev => {
               const updated = [...prev, newElement]
               redrawCanvas(updated)
               return updated
             })
             setIsCollaborating(true)
-            setTimeout(() => setIsCollaborating(false), 2000)
+            setTimeout(() => {
+              if (isMountedRef.current) {
+                setIsCollaborating(false)
+              }
+            }, 2000)
           }
         }
       )
@@ -157,11 +163,14 @@ function WhiteboardContent() {
         { event: 'DELETE', schema: 'public', table: 'whiteboard_elements' },
         (payload) => {
           console.log('🗑️ Whiteboard element deleted:', payload.old)
-          setElements(prev => {
-            const updated = prev.filter(el => el.id !== payload.old.id)
-            redrawCanvas(updated)
-            return updated
-          })
+          // Only update state if component is still mounted
+          if (isMountedRef.current) {
+            setElements(prev => {
+              const updated = prev.filter(el => el.id !== payload.old.id)
+              redrawCanvas(updated)
+              return updated
+            })
+          }
         }
       )
       .subscribe((status) => {

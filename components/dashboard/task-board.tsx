@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { TasksService, CreateTaskData } from '@/lib/tasks-service'
 import { useUsers } from '@/hooks/use-users'
@@ -89,31 +89,7 @@ export function TaskBoard() {
     useSensor(KeyboardSensor)
   )
 
-  // Load tasks from database
-  useEffect(() => {
-    if (user) {
-      loadTasks()
-    }
-  }, [user])
-
-  // Update active timers
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveTimers(prev => {
-        const updated = { ...prev }
-        Object.keys(updated).forEach(taskId => {
-          if (updated[taskId] && !updated[taskId].isPaused) {
-            updated[taskId].elapsed = Date.now() - updated[taskId].startTime - updated[taskId].totalPausedTime
-          }
-        })
-        return updated
-      })
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     try {
       setIsLoading(true)
       
@@ -137,7 +113,31 @@ export function TaskBoard() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [toast])
+
+  // Load tasks from database
+  useEffect(() => {
+    if (user) {
+      loadTasks()
+    }
+  }, [user, loadTasks])
+
+  // Update active timers
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTimers(prev => {
+        const updated = { ...prev }
+        Object.keys(updated).forEach(taskId => {
+          if (updated[taskId] && !updated[taskId].isPaused) {
+            updated[taskId].elapsed = Date.now() - updated[taskId].startTime - updated[taskId].totalPausedTime
+          }
+        })
+        return updated
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   const handleCreateTask = async (taskData: any) => {
     if (!user) {
