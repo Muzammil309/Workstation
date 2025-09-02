@@ -34,6 +34,28 @@ export default function DashboardPage() {
 
   console.log('🔍 DashboardPage: Render with user:', user, 'isLoading:', isLoading)
 
+  // Initialize automation engine (must be before any conditional returns to follow Rules of Hooks)
+  useEffect(() => {
+    if (user) {
+      console.log('🤖 Initializing automation engine for user:', user.id)
+      try {
+        automationEngine.start()
+      } catch (error) {
+        console.error('Failed to start automation engine:', error)
+      }
+
+      return () => {
+        console.log('🤖 Stopping automation engine')
+        try {
+          automationEngine.stop()
+        } catch (error) {
+          console.error('Failed to stop automation engine:', error)
+        }
+      }
+    }
+  }, [user])
+
+
   if (isLoading) {
     console.log('🔍 DashboardPage: Showing loading spinner')
     return (
@@ -47,13 +69,13 @@ export default function DashboardPage() {
           <div className="text-gray-400 text-xs">
             If this takes more than 5 seconds, there may be an authentication issue
           </div>
-          <button 
+          <button
             onClick={() => window.location.href = '/'}
             className="px-4 py-2 bg-neon-blue text-white rounded-lg hover:bg-neon-blue/90 transition-colors"
           >
             Go to Login
           </button>
-          <button 
+          <button
             onClick={async () => {
               const debugInfo = await debugAuth()
               console.log('🔍 Dashboard Debug Info:', debugInfo)
@@ -83,26 +105,6 @@ export default function DashboardPage() {
 
   console.log('🔍 DashboardPage: User authenticated, rendering dashboard')
 
-  // Initialize automation engine
-  useEffect(() => {
-    if (user) {
-      console.log('🤖 Initializing automation engine for user:', user.id)
-      try {
-        automationEngine.start()
-      } catch (error) {
-        console.error('Failed to start automation engine:', error)
-      }
-
-      return () => {
-        console.log('🤖 Stopping automation engine')
-        try {
-          automationEngine.stop()
-        } catch (error) {
-          console.error('Failed to stop automation engine:', error)
-        }
-      }
-    }
-  }, [user])
 
   const renderContent = () => {
     switch (activeTab) {
@@ -178,7 +180,7 @@ export default function DashboardPage() {
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             isSidebarCollapsed={isSidebarCollapsed}
           />
-          
+
           <main className="flex-1 p-6 overflow-auto">
             <motion.div
               key={activeTab}
