@@ -37,6 +37,12 @@ function TodoListContent() {
   const { user } = useAuth()
   const { toast } = useToast()
   const { handleError } = useErrorHandler()
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [filterPriority, setFilterPriority] = useState<string>('all')
 
   if (!user) {
     return (
@@ -45,12 +51,6 @@ function TodoListContent() {
       </div>
     )
   }
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterStatus, setFilterStatus] = useState<string>('all')
-  const [filterPriority, setFilterPriority] = useState<string>('all')
 
   useEffect(() => {
     const initializeTodoList = async () => {

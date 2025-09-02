@@ -37,6 +37,13 @@ function TeamInboxContent() {
   const { user } = useAuth()
   const { toast } = useToast()
   const { handleError } = useErrorHandler()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   if (!user) {
     return (
@@ -45,13 +52,6 @@ function TeamInboxContent() {
       </div>
     )
   }
-  const [messages, setMessages] = useState<Message[]>([])
-  const [users, setUsers] = useState<User[]>([])
-  const [newMessage, setNewMessage] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     loadMessages()

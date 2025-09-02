@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User, ListTodo, MessageSquare, PenTool, Bot } from 'lucide-react'
+import { X, LayoutDashboard, CheckSquare, BarChart3, Settings, Users, Plus, FolderOpen, Calendar, FileText, Copy, Link, ChevronLeft, ChevronRight, User, ListTodo, MessageSquare, PenTool, Bot, Bug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
@@ -47,6 +47,12 @@ const navigationItems = [
     label: 'Automation',
     icon: Bot,
     description: 'Event management automation'
+  },
+  {
+    id: 'debug',
+    label: 'Debug',
+    icon: Bug,
+    description: 'Component testing & debugging'
   },
   {
     id: 'projects',

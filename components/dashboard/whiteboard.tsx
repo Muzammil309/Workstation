@@ -54,14 +54,6 @@ function WhiteboardContent() {
   const { user } = useAuth()
   const { toast } = useToast()
   const { handleError } = useErrorHandler()
-
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Please log in to access the whiteboard.</p>
-      </div>
-    )
-  }
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [currentTool, setCurrentTool] = useState<'pen' | 'rectangle' | 'circle' | 'text' | 'eraser'>('pen')
@@ -79,6 +71,14 @@ function WhiteboardContent() {
     assignee: ''
   })
   const [users, setUsers] = useState<any[]>([])
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Please log in to access the whiteboard.</p>
+      </div>
+    )
+  }
 
   const colors = [
     '#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', 
