@@ -16,6 +16,7 @@ import { showNotification } from '@/lib/notifications'
 import { useNotificationTriggers } from '@/lib/notification-context'
 import { useInbox } from '@/lib/inbox-context'
 import { ErrorBoundary, DashboardErrorFallback } from '@/components/error-boundary'
+import { useUsers } from '@/hooks/use-users'
 
 interface Message {
   id: string
@@ -268,13 +269,13 @@ function TeamInboxContent() {
 
   const loadUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, name, email, role')
-        .neq('id', user?.id) // Exclude current user
-
-      if (error) throw error
-      setUsers(data || [])
+      // Use shared cache via useUsers to avoid duplicate queries
+      const { users: cached } = useUsers()
+      // Exclude current user and coerce to local type shape
+      const filtered = (cached || [])
+        .filter(u => u.id !== user?.id)
+        .map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role || 'user' }))
+      setUsers(filtered)
     } catch (error: any) {
       console.error('Error loading users:', error)
     }

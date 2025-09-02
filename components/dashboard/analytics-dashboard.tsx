@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts'
 import { Users, CheckSquare, Clock, TrendingUp, Target, Award, Calendar, Activity } from 'lucide-react'
+import { useUsers } from '@/hooks/use-users'
+
 
 interface Task {
   id: string
@@ -72,16 +74,11 @@ export function AnalyticsDashboard() {
 
       if (tasksError) throw tasksError
 
-      // Fetch users
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('id, name, email, role, department, status')
-        .eq('status', 'active')
-
-      if (usersError) throw usersError
+      // Fetch users via shared cache to avoid extra network calls
+      const { users: cachedUsers } = useUsers()
 
       setTasks(tasksData || [])
-      setUsers(usersData || [])
+      setUsers((cachedUsers || []).map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role || 'user', department: u.department || '' })))
 
       // Calculate statistics
       calculateStats(tasksData || [])

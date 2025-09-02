@@ -10,20 +10,16 @@ export interface User {
   status?: string
 }
 
-export function useUsers() {
-  const [users, setUsers] = useState<User[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// Simple shared cache to dedupe concurrent loads and reduce load during dashboard init
+let cachedUsers: User[] | null = null
+let inFlight: Promise<User[]> | null = null
+let lastFetched = 0
+const TTL_MS = 60_000 // 1 minute cache TTL
 
-  useEffect(() => {
-    loadUsers()
-  }, [])
-
-  const loadUsers = async () => {
+async function fetchUsersWithRetry(): Promise<User[]> {
+  let delay = 300
+  for (let i = 0; i < 3; i++) {
     try {
-      setIsLoading(true)
-      setError(null)
-      
       const { data, error } = await supabase
         .from('users')
         .select('id, name, email, role, department, status')
@@ -31,14 +27,57 @@ export function useUsers() {
         .order('name')
 
       if (error) throw error
-      setUsers(data || [])
+      return data || []
     } catch (err) {
-      console.error('Error loading users:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load users')
-    } finally {
-      setIsLoading(false)
+      if (i === 2) throw err
+      await new Promise(res => setTimeout(res, delay))
+      delay *= 2
     }
   }
+  return []
+}
+
+export function useUsers() {
+  const [users, setUsers] = useState<User[]>(cachedUsers || [])
+  const [isLoading, setIsLoading] = useState(!cachedUsers)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadUsers = async () => {
+      try {
+        setIsLoading(prev => prev || !cachedUsers)
+        setError(null)
+
+        // Serve from cache if fresh
+        if (cachedUsers && Date.now() - lastFetched < TTL_MS) {
+          if (!cancelled) setUsers(cachedUsers)
+          return
+        }
+
+        // Dedupe concurrent loads
+        if (!inFlight) {
+          inFlight = fetchUsersWithRetry()
+        }
+        const data = await inFlight
+        if (!cancelled) {
+          cachedUsers = data
+          lastFetched = Date.now()
+          setUsers(data)
+        }
+      } catch (err) {
+        console.error('Error loading users:', err)
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load users')
+      } finally {
+        if (!cancelled) setIsLoading(false)
+        inFlight = null
+      }
+    }
+
+    loadUsers()
+    return () => { cancelled = true }
+  }, [])
 
   const getUserById = (id: string): User | undefined => {
     return users.find(user => user.id === id)
@@ -52,6 +91,16 @@ export function useUsers() {
     return getUsersByIds(ids).map(user => user.name)
   }
 
+  const refetch = async () => {
+    cachedUsers = null
+    lastFetched = 0
+    await fetchUsersWithRetry().then(data => {
+      cachedUsers = data
+      lastFetched = Date.now()
+      setUsers(data)
+    })
+  }
+
   return {
     users,
     isLoading,
@@ -59,6 +108,6 @@ export function useUsers() {
     getUserById,
     getUsersByIds,
     getUserNames,
-    refetch: loadUsers
+    refetch
   }
 }

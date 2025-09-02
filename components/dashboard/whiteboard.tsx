@@ -28,6 +28,7 @@ import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
 import { useNotificationTriggers } from '@/lib/notification-context'
 import { ErrorBoundary, DashboardErrorFallback } from '@/components/error-boundary'
+import { useUsers } from '@/hooks/use-users'
 
 interface DrawingElement {
   id: string
@@ -108,12 +109,9 @@ function WhiteboardContent() {
 
   const loadUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, name, email')
-
-      if (error) throw error
-      setUsers(data || [])
+      // Use shared cached users to avoid extra network calls during init
+      const { users: cached } = useUsers()
+      setUsers(cached || [])
     } catch (error: any) {
       console.error('Error loading users:', error)
     }

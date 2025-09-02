@@ -90,21 +90,33 @@ export function TaskBoard() {
   )
 
   const loadTasks = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      
+    const attempt = async () => {
       // Use direct Supabase call instead of TasksService
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
         .order('created_at', { ascending: false })
-      
-      if (error) {
-        throw error
+      if (error) throw error
+      return data || []
+    }
+
+    try {
+      setIsLoading(true)
+      // Retry with backoff to survive transient network/resource errors
+      let delay = 300
+      for (let i = 0; i < 3; i++) {
+        try {
+          const tasks = await attempt()
+          setTasks(tasks)
+          return
+        } catch (err: any) {
+          if (i === 2) throw err
+          await new Promise(res => setTimeout(res, delay))
+          delay *= 2
+        }
       }
-      
-      setTasks(data || [])
     } catch (error: any) {
+      console.error('Failed to load tasks:', error)
       toast({
         title: 'Error',
         description: 'Failed to load tasks. Please try again.',
@@ -1399,31 +1411,21 @@ function SortableTaskCard({
 }: SortableTaskCardProps) {
   const { user } = useAuth()
   const [assignedUser, setAssignedUser] = useState<any>(null)
-  const [users, setUsers] = useState<any[]>([])
 
-  // Fetch users for assignment display
+  // Derive assigned user from cached users to avoid per-card network calls
   useEffect(() => {
-    const fetchUsers = async () => {
+    if (task.assignees && task.assignees.length > 0) {
       try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('id, name, email, avatar')
-        
-        if (error) throw error
-        setUsers(data || [])
-        
-                 // Find assigned users
-         if (task.assignees && task.assignees.length > 0) {
-           const assigned = data?.find(u => u.id === task.assignees[0]) // Show first assignee for now
-           setAssignedUser(assigned)
-         }
-      } catch (error) {
-        console.error('Error fetching users:', error)
+        const [first] = getUsersByIds(task.assignees)
+        setAssignedUser(first || null)
+      } catch (e) {
+        console.error('Error resolving assigned user from cache:', e)
+        setAssignedUser(null)
       }
+    } else {
+      setAssignedUser(null)
     }
-    
-         fetchUsers()
-   }, [task.assignees])
+  }, [task.assignees, getUsersByIds])
 
   // Calculate time remaining until deadline
   const getTimeRemaining = () => {
