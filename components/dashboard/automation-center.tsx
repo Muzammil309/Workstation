@@ -2,31 +2,40 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  Zap, 
-  Calendar, 
-  Users, 
-  Clock, 
-  CheckCircle, 
-  AlertTriangle, 
-  Settings, 
-  Play, 
-  Pause, 
+import {
+  Zap,
+  Calendar,
+  Users,
+  Clock,
+  CheckCircle,
+  AlertTriangle,
+  Settings,
+  Play,
+  Pause,
   Plus,
   Edit,
   Trash2,
   Bot,
   Target,
-  ArrowRight
+  ArrowRight,
+  Bell,
+  Mail,
+  Volume2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/lib/supabase'
+import { automationEngine, AutomationRule as EngineRule, AutomationAction as EngineAction, TriggerConditions } from '@/lib/automation-engine'
 import { ErrorBoundary, DashboardErrorFallback } from '@/components/error-boundary'
 
 interface AutomationRule {
@@ -81,8 +90,31 @@ function AutomationCenterContent() {
   const [ruleFormData, setRuleFormData] = useState({
     name: '',
     description: '',
-    trigger_type: 'event_created',
+    trigger_type: 'deadline_approaching',
     action_type: 'send_notification',
+    is_active: true
+  })
+  const [users, setUsers] = useState<any[]>([])
+  const [newRuleData, setNewRuleData] = useState({
+    name: '',
+    description: '',
+    trigger_type: 'deadline_approaching' as const,
+    trigger_conditions: {
+      hours_before_deadline: 24,
+      priority_levels: [] as string[],
+      task_status: ['pending', 'in-progress'] as string[],
+      assignee_ids: [] as string[]
+    },
+    actions: [{
+      type: 'send_notification' as const,
+      parameters: {
+        title: 'Task Deadline Reminder',
+        message: 'Your task is due soon!',
+        in_app: true,
+        sound: true,
+        email: false
+      }
+    }],
     is_active: true
   })
 
@@ -190,7 +222,21 @@ function AutomationCenterContent() {
   // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
     loadAutomationData()
+    loadUsers()
   }, [loadAutomationData])
+
+  const loadUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name, email')
+
+      if (error) throw error
+      setUsers(data || [])
+    } catch (error) {
+      console.error('Error loading users:', error)
+    }
+  }
 
   const toggleRuleStatus = async (ruleId: string, isActive: boolean) => {
     try {
@@ -230,7 +276,7 @@ function AutomationCenterContent() {
 
   const createAutomationRule = async () => {
     try {
-      if (!ruleFormData.name.trim()) {
+      if (!newRuleData.name.trim()) {
         toast({
           title: "Error",
           description: "Rule name is required",
@@ -239,47 +285,44 @@ function AutomationCenterContent() {
         return
       }
 
-      const newRule = {
-        name: ruleFormData.name,
-        description: ruleFormData.description,
-        trigger_type: ruleFormData.trigger_type as any,
-        trigger_conditions: {},
-        actions: [{
-          type: ruleFormData.action_type as any,
-          parameters: {}
-        }],
-        is_active: ruleFormData.is_active,
-        created_by: user?.id || '',
-        execution_count: 0
+      const ruleToCreate = {
+        name: newRuleData.name,
+        description: newRuleData.description,
+        trigger_type: newRuleData.trigger_type,
+        trigger_conditions: newRuleData.trigger_conditions,
+        actions: newRuleData.actions,
+        is_active: newRuleData.is_active,
+        created_by: user?.id || ''
       }
 
-      // Try to save to database, fallback to local state
-      try {
-        const { data, error } = await supabase
-          .from('automation_rules')
-          .insert([newRule])
-          .select()
-          .single()
+      // Use the automation engine to create the rule
+      const createdRule = await automationEngine.addRule(ruleToCreate)
 
-        if (error) throw error
-
-        setAutomationRules(prev => [data, ...prev])
-      } catch (dbError) {
-        console.log('Database save failed, adding to local state:', dbError)
-        const localRule: AutomationRule = {
-          ...newRule,
-          id: `local-${Date.now()}`,
-          created_at: new Date().toISOString()
-        }
-        setAutomationRules(prev => [localRule, ...prev])
-      }
-
+      // Update local state
+      setAutomationRules(prev => [createdRule, ...prev])
       setShowCreateRule(false)
-      setRuleFormData({
+
+      // Reset form
+      setNewRuleData({
         name: '',
         description: '',
-        trigger_type: 'event_created',
-        action_type: 'send_notification',
+        trigger_type: 'deadline_approaching',
+        trigger_conditions: {
+          hours_before_deadline: 24,
+          priority_levels: [],
+          task_status: ['pending', 'in-progress'],
+          assignee_ids: []
+        },
+        actions: [{
+          type: 'send_notification',
+          parameters: {
+            title: 'Task Deadline Reminder',
+            message: 'Your task is due soon!',
+            in_app: true,
+            sound: true,
+            email: false
+          }
+        }],
         is_active: true
       })
 
@@ -803,94 +846,269 @@ function AutomationCenterContent() {
         </div>
       )}
 
-      {/* Create Rule Modal */}
-      {showCreateRule && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold mb-4">Create New Automation Rule</h3>
+      {/* Enhanced Create Rule Modal */}
+      <Dialog open={showCreateRule} onOpenChange={setShowCreateRule}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="w-5 h-5" />
+              Create New Automation Rule
+            </DialogTitle>
+          </DialogHeader>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column - Basic Info */}
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Rule Name</label>
-                <input
-                  type="text"
-                  value={ruleFormData.name}
-                  onChange={(e) => setRuleFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter rule name"
+                <Label htmlFor="rule-name">Rule Name *</Label>
+                <Input
+                  id="rule-name"
+                  value={newRuleData.name}
+                  onChange={(e) => setNewRuleData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., Task Deadline Reminder"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <textarea
-                  value={ruleFormData.description}
-                  onChange={(e) => setRuleFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
+                <Label htmlFor="rule-description">Description</Label>
+                <Textarea
+                  id="rule-description"
+                  value={newRuleData.description}
+                  onChange={(e) => setNewRuleData(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Describe what this rule does"
+                  rows={3}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Trigger</label>
-                <select
-                  value={ruleFormData.trigger_type}
-                  onChange={(e) => setRuleFormData(prev => ({ ...prev, trigger_type: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <Label htmlFor="trigger-type">Trigger Type</Label>
+                <Select
+                  value={newRuleData.trigger_type}
+                  onValueChange={(value) => setNewRuleData(prev => ({ ...prev, trigger_type: value as any }))}
                 >
-                  <option value="task_created">Task Created</option>
-                  <option value="task_completed">Task Completed</option>
-                  <option value="deadline_approaching">Deadline Approaching</option>
-                  <option value="task_overdue">Task Overdue</option>
-                  <option value="status_changed">Status Changed</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="deadline_approaching">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        Deadline Approaching
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="task_overdue">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Task Overdue
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="status_change">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4" />
+                        Status Change
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Action</label>
-                <select
-                  value={ruleFormData.action_type}
-                  onChange={(e) => setRuleFormData(prev => ({ ...prev, action_type: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="send_notification">Send Notification</option>
-                  <option value="send_email">Send Email</option>
-                  <option value="assign_user">Assign User</option>
-                  <option value="create_task">Create Task</option>
-                  <option value="update_status">Update Status</option>
-                </select>
-              </div>
+              {/* Trigger Conditions */}
+              <div className="space-y-3 border rounded-lg p-4">
+                <Label className="text-sm font-semibold">Trigger Conditions</Label>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  checked={ruleFormData.is_active}
-                  onChange={(e) => setRuleFormData(prev => ({ ...prev, is_active: e.target.checked }))}
-                  className="mr-2"
-                />
-                <label htmlFor="is_active" className="text-sm font-medium">Active</label>
+                {newRuleData.trigger_type === 'deadline_approaching' && (
+                  <div>
+                    <Label htmlFor="hours-before">Hours Before Deadline</Label>
+                    <Input
+                      id="hours-before"
+                      type="number"
+                      min="1"
+                      max="168"
+                      value={newRuleData.trigger_conditions.hours_before_deadline}
+                      onChange={(e) => setNewRuleData(prev => ({
+                        ...prev,
+                        trigger_conditions: {
+                          ...prev.trigger_conditions,
+                          hours_before_deadline: parseInt(e.target.value) || 24
+                        }
+                      }))}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <Label>Priority Levels (leave empty for all)</Label>
+                  <div className="flex gap-2 mt-2">
+                    {['low', 'medium', 'high'].map(priority => (
+                      <div key={priority} className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={newRuleData.trigger_conditions.priority_levels.includes(priority)}
+                          onCheckedChange={(checked) => {
+                            setNewRuleData(prev => ({
+                              ...prev,
+                              trigger_conditions: {
+                                ...prev.trigger_conditions,
+                                priority_levels: checked
+                                  ? [...prev.trigger_conditions.priority_levels, priority]
+                                  : prev.trigger_conditions.priority_levels.filter(p => p !== priority)
+                              }
+                            }))
+                          }}
+                        />
+                        <Label className="capitalize">{priority}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Task Status</Label>
+                  <div className="flex gap-2 mt-2">
+                    {['pending', 'in-progress'].map(status => (
+                      <div key={status} className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={newRuleData.trigger_conditions.task_status.includes(status)}
+                          onCheckedChange={(checked) => {
+                            setNewRuleData(prev => ({
+                              ...prev,
+                              trigger_conditions: {
+                                ...prev.trigger_conditions,
+                                task_status: checked
+                                  ? [...prev.trigger_conditions.task_status, status]
+                                  : prev.trigger_conditions.task_status.filter(s => s !== status)
+                              }
+                            }))
+                          }}
+                        />
+                        <Label className="capitalize">{status.replace('-', ' ')}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowCreateRule(false)}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createAutomationRule}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Create Rule
-              </button>
+            {/* Right Column - Actions */}
+            <div className="space-y-4">
+              <div className="space-y-3 border rounded-lg p-4">
+                <Label className="text-sm font-semibold">Notification Settings</Label>
+
+                <div>
+                  <Label htmlFor="notification-title">Notification Title</Label>
+                  <Input
+                    id="notification-title"
+                    value={newRuleData.actions[0].parameters.title}
+                    onChange={(e) => setNewRuleData(prev => ({
+                      ...prev,
+                      actions: [{
+                        ...prev.actions[0],
+                        parameters: {
+                          ...prev.actions[0].parameters,
+                          title: e.target.value
+                        }
+                      }]
+                    }))}
+                    placeholder="Notification title"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="notification-message">Message</Label>
+                  <Textarea
+                    id="notification-message"
+                    value={newRuleData.actions[0].parameters.message}
+                    onChange={(e) => setNewRuleData(prev => ({
+                      ...prev,
+                      actions: [{
+                        ...prev.actions[0],
+                        parameters: {
+                          ...prev.actions[0].parameters,
+                          message: e.target.value
+                        }
+                      }]
+                    }))}
+                    placeholder="Notification message"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={newRuleData.actions[0].parameters.in_app}
+                      onCheckedChange={(checked) => setNewRuleData(prev => ({
+                        ...prev,
+                        actions: [{
+                          ...prev.actions[0],
+                          parameters: {
+                            ...prev.actions[0].parameters,
+                            in_app: !!checked
+                          }
+                        }]
+                      }))}
+                    />
+                    <Bell className="w-4 h-4" />
+                    <Label>In-App Notification</Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={newRuleData.actions[0].parameters.sound}
+                      onCheckedChange={(checked) => setNewRuleData(prev => ({
+                        ...prev,
+                        actions: [{
+                          ...prev.actions[0],
+                          parameters: {
+                            ...prev.actions[0].parameters,
+                            sound: !!checked
+                          }
+                        }]
+                      }))}
+                    />
+                    <Volume2 className="w-4 h-4" />
+                    <Label>Sound Alert</Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={newRuleData.actions[0].parameters.email}
+                      onCheckedChange={(checked) => setNewRuleData(prev => ({
+                        ...prev,
+                        actions: [{
+                          ...prev.actions[0],
+                          parameters: {
+                            ...prev.actions[0].parameters,
+                            email: !!checked
+                          }
+                        }]
+                      }))}
+                    />
+                    <Mail className="w-4 h-4" />
+                    <Label>Email Notification</Label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={newRuleData.is_active}
+                  onCheckedChange={(checked) => setNewRuleData(prev => ({ ...prev, is_active: !!checked }))}
+                />
+                <Label>Activate rule immediately</Label>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowCreateRule(false)}>
+              Cancel
+            </Button>
+            <Button onClick={createAutomationRule}>
+              Create Rule
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Rule Modal */}
       {showEditRule && editingRule && (

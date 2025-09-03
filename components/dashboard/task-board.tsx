@@ -33,6 +33,7 @@ import { useNotificationTriggers } from '@/lib/notification-context'
 import { notificationService } from '@/lib/notification-service'
 import { CreateTaskModal } from './create-task-modal'
 import { TaskPreviewModal } from './task-preview-modal'
+import { TaskEditModal } from './task-edit-modal'
 import {
   DndContext,
   closestCenter,
@@ -64,7 +65,9 @@ export function TaskBoard() {
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editFormData, setEditFormData] = useState<Partial<Task>>({})
   const [isEditLoading, setIsEditLoading] = useState(false)
@@ -420,6 +423,31 @@ export function TaskBoard() {
     setShowPreviewModal(true)
   }
 
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task)
+    setShowEditModal(true)
+  }
+
+  const handleSaveTaskEdit = async (taskId: string, updates: Partial<Task>) => {
+    try {
+      console.log('🔄 Saving task edit:', taskId, updates)
+
+      // Use the existing handleUpdateTask function for consistency
+      await handleUpdateTask(taskId, updates)
+
+      // Close the edit modal
+      setShowEditModal(false)
+      setEditingTask(null)
+
+      // Reload tasks to ensure we have the latest data
+      await loadTasks()
+
+    } catch (error) {
+      console.error('❌ Error saving task edit:', error)
+      // Error handling is already done in handleUpdateTask
+    }
+  }
+
   // Helper function to update project task counts
   const updateProjectTaskCounts = async (projectId: string) => {
     if (!projectId) return
@@ -454,39 +482,7 @@ export function TaskBoard() {
     }
   }
 
-  const handleEditTask = (task: Task) => {
-    setEditingTaskId(task.id)
-    setEditFormData({
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      priority: task.priority,
-      deadline: task.deadline,
-      progress: task.progress,
-      assignees: task.assignees
-    })
-  }
 
-  const handleCancelEdit = () => {
-    setEditingTaskId(null)
-    setEditFormData({})
-    setIsEditLoading(false)
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editingTaskId || !editFormData) return
-
-    try {
-      setIsEditLoading(true)
-      await handleUpdateTask(editingTaskId, editFormData)
-      setEditingTaskId(null)
-      setEditFormData({})
-    } catch (error) {
-      // Error is already handled in handleUpdateTask
-    } finally {
-      setIsEditLoading(false)
-    }
-  }
 
   const handleDeleteTask = async (taskId: string) => {
     try {
@@ -838,6 +834,19 @@ export function TaskBoard() {
          onTaskUpdate={handleUpdateTask}
        />
 
+       {/* Task Edit Modal */}
+       <TaskEditModal
+         isOpen={showEditModal}
+         onClose={() => {
+           setShowEditModal(false)
+           setEditingTask(null)
+         }}
+         task={editingTask}
+         onSave={handleSaveTaskEdit}
+         users={users}
+         allTasks={tasks}
+       />
+
       {/* Member Filter */}
       <div className="flex items-center gap-4 mb-6">
         <div className="flex items-center gap-2">
@@ -1030,56 +1039,26 @@ export function TaskBoard() {
                       </td>
                       <td className="p-3">
                         <div className="flex items-center space-x-1">
-                          {editingTaskId === task.id ? (
-                            <>
-                              {/* Save Button */}
-                              <button
-                                onClick={handleSaveEdit}
-                                disabled={isEditLoading}
-                                className="p-1 text-green-600 hover:text-green-700 transition-colors disabled:opacity-50"
-                                title="Save Changes"
-                              >
-                                {isEditLoading ? (
-                                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-green-600 border-t-transparent"></div>
-                                ) : (
-                                  <Check className="w-4 h-4" />
-                                )}
-                              </button>
+                          {/* View Button */}
+                          <button
+                            onClick={() => {
+                              setSelectedTask(task)
+                              setShowPreviewModal(true)
+                            }}
+                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
 
-                              {/* Cancel Button */}
-                              <button
-                                onClick={handleCancelEdit}
-                                disabled={isEditLoading}
-                                className="p-1 text-red-600 hover:text-red-700 transition-colors disabled:opacity-50"
-                                title="Cancel Edit"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              {/* View Button */}
-                              <button
-                                onClick={() => {
-                                  setSelectedTask(task)
-                                  setShowPreviewModal(true)
-                                }}
-                                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                                title="View Details"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-
-                              {/* Edit Button */}
-                              <button
-                                onClick={() => handleEditTask(task)}
-                                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                                title="Edit Task"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
+                          {/* Edit Button */}
+                          <button
+                            onClick={() => handleEditTask(task)}
+                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Edit Task"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
                           
                           {/* Timer Controls */}
                           {task.status === 'in-progress' && activeTimers[task.id] && (
@@ -1211,6 +1190,7 @@ export function TaskBoard() {
                      onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
                      onPreview={handlePreviewTask}
+                     onEdit={handleEditTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
                      onResumeTimer={resumeTimer}
@@ -1249,6 +1229,7 @@ export function TaskBoard() {
                      onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
                      onPreview={handlePreviewTask}
+                     onEdit={handleEditTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
                      onResumeTimer={resumeTimer}
@@ -1287,6 +1268,7 @@ export function TaskBoard() {
                      onUpdate={handleUpdateTask}
                      onDelete={handleDeleteTask}
                      onPreview={handlePreviewTask}
+                     onEdit={handleEditTask}
                      onStartTimer={startTimer}
                      onPauseTimer={pauseTimer}
                      onResumeTimer={resumeTimer}
@@ -1377,6 +1359,7 @@ interface SortableTaskCardProps {
   onUpdate: (taskId: string, updates: Partial<CreateTaskData>) => void
   onDelete: (taskId: string) => void
   onPreview: (task: Task) => void
+  onEdit: (task: Task) => void
   onStartTimer: (taskId: string) => void
   onPauseTimer: (taskId: string) => void
   onResumeTimer: (taskId: string) => void
@@ -1399,6 +1382,7 @@ function SortableTaskCard({
   onUpdate,
   onDelete,
   onPreview,
+  onEdit,
   onStartTimer,
   onPauseTimer,
   onResumeTimer,
@@ -1709,6 +1693,19 @@ function SortableTaskCard({
             >
               <Eye className="w-3 h-3" />
               <span>View</span>
+            </button>
+
+            {/* Edit Button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit(task)
+              }}
+              className="flex items-center space-x-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-green-500 to-green-600 text-white text-xs font-medium rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+              title="Edit Task"
+            >
+              <Edit className="w-3 h-3" />
+              <span>Edit</span>
             </button>
 
                          {/* Start Timer Button */}

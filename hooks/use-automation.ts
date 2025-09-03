@@ -201,7 +201,7 @@ export function useAutomation() {
             type: 'send_notification' as const,
             parameters: {
               message: `Event "${eventData.title}" deadline is approaching`,
-              recipients: 'assignees'
+              recipients: ['assignees']
             }
           }
         ]
@@ -216,7 +216,7 @@ export function useAutomation() {
             type: 'send_notification' as const,
             parameters: {
               message: 'Task is overdue and needs immediate attention',
-              recipients: 'team_leads'
+              recipients: ['team_leads']
             }
           },
           {

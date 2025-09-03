@@ -12,451 +12,505 @@ export interface AutomationRule {
   is_active: boolean
   created_by: string
   execution_count: number
+  created_at: string
+  last_executed?: string
+  updated_at?: string
 }
 
 export interface AutomationAction {
-  type: 'create_task' | 'send_notification' | 'assign_team' | 'update_status' | 'schedule_reminder'
-  parameters: any
+  type: 'send_notification' | 'send_email' | 'play_sound' | 'create_task' | 'assign_team' | 'update_status' | 'schedule_reminder'
+  parameters: {
+    title?: string
+    message?: string
+    sound?: boolean
+    email?: boolean
+    in_app?: boolean
+    recipients?: string[]
+    delay_minutes?: number
+    task_data?: any
+    status?: string
+    assignee_id?: string
+  }
 }
 
 export interface AutomationContext {
   trigger_data: any
   user_id: string
   timestamp: string
+  task_id?: string
+  task_data?: any
 }
 
-export class AutomationEngine {
-  private static instance: AutomationEngine
-  private isRunning = false
-  private checkInterval = 60000 // Check every minute
+export interface TriggerConditions {
+  hours_before_deadline?: number
+  task_status?: string[]
+  priority_levels?: string[]
+  assignee_ids?: string[]
+  project_ids?: string[]
+  tags?: string[]
+}
 
-  static getInstance(): AutomationEngine {
-    if (!AutomationEngine.instance) {
-      AutomationEngine.instance = new AutomationEngine()
-    }
-    return AutomationEngine.instance
-  }
+class AutomationEngine {
+  private isRunning = false
+  private intervalId: NodeJS.Timeout | null = null
+  private rules: AutomationRule[] = []
+  private lastCheck = new Date()
 
   async start() {
     if (this.isRunning) return
-    
+
+    console.log('🤖 Starting Automation Engine...')
     this.isRunning = true
-    console.log('🤖 Automation Engine started')
-    
-    // Start periodic checks
-    this.scheduleNextCheck()
-    
-    // Set up real-time triggers
-    this.setupRealtimeTriggers()
+
+    // Load active rules
+    await this.loadRules()
+
+    // Start periodic checks every minute
+    this.intervalId = setInterval(() => {
+      this.checkTriggers()
+    }, 60000) // Check every minute
+
+    // Initial check
+    this.checkTriggers()
+
+    console.log('✅ Automation Engine started')
   }
 
-  stop() {
-    this.isRunning = false
-    console.log('🤖 Automation Engine stopped')
-  }
-
-  private scheduleNextCheck() {
+  async stop() {
     if (!this.isRunning) return
-    
-    setTimeout(async () => {
-      await this.runPeriodicChecks()
-      this.scheduleNextCheck()
-    }, this.checkInterval)
+
+    console.log('🛑 Stopping Automation Engine...')
+    this.isRunning = false
+
+    if (this.intervalId) {
+      clearInterval(this.intervalId)
+      this.intervalId = null
+    }
+
+    console.log('✅ Automation Engine stopped')
   }
 
-  private async runPeriodicChecks() {
+  async loadRules() {
     try {
-      await Promise.all([
-        this.checkDeadlineApproaching(),
-        this.checkOverdueTasks(),
-        this.checkTeamWorkload()
-      ])
+      const { data, error } = await supabase
+        .from('automation_rules')
+        .select('*')
+        .eq('is_active', true)
+
+      if (error) throw error
+
+      this.rules = data || []
+      console.log(`📋 Loaded ${this.rules.length} active automation rules`)
     } catch (error) {
-      console.error('Error in periodic automation checks:', error)
+      console.error('❌ Error loading automation rules:', error)
+      this.rules = []
     }
   }
 
-  private setupRealtimeTriggers() {
-    // Listen for new tasks
-    supabase
-      .channel('automation_tasks')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'tasks' },
-        (payload) => this.handleTaskCreated(payload.new)
-      )
-      .subscribe()
+  async checkTriggers() {
+    if (!this.isRunning) return
 
-    // Listen for task status changes
-    supabase
-      .channel('automation_task_updates')
-      .on('postgres_changes', 
-        { event: 'UPDATE', schema: 'public', table: 'tasks' },
-        (payload) => this.handleTaskUpdated(payload.old, payload.new)
-      )
-      .subscribe()
+    console.log('🔍 Checking automation triggers...')
+
+    for (const rule of this.rules) {
+      try {
+        await this.evaluateRule(rule)
+      } catch (error) {
+        console.error(`❌ Error evaluating rule ${rule.name}:`, error)
+      }
+    }
+
+    this.lastCheck = new Date()
   }
 
-  private async checkDeadlineApproaching() {
-    const { data: rules } = await supabase
-      .from('automation_rules')
-      .select('*')
-      .eq('trigger_type', 'deadline_approaching')
-      .eq('is_active', true)
+  async evaluateRule(rule: AutomationRule) {
+    switch (rule.trigger_type) {
+      case 'deadline_approaching':
+        await this.checkDeadlineApproaching(rule)
+        break
+      case 'task_overdue':
+        await this.checkTaskOverdue(rule)
+        break
+      case 'status_change':
+        // This would be triggered by real-time events, not periodic checks
+        break
+      default:
+        console.log(`⚠️ Unknown trigger type: ${rule.trigger_type}`)
+    }
+  }
 
-    if (!rules) return
+  async checkDeadlineApproaching(rule: AutomationRule) {
+    const conditions = rule.trigger_conditions as TriggerConditions
+    const hoursBeforeDeadline = conditions.hours_before_deadline || 24
 
-    for (const rule of rules) {
-      const daysToCheck = rule.trigger_conditions?.days_before || [7, 3, 1]
-      
-      for (const days of daysToCheck) {
-        const targetDate = new Date()
-        targetDate.setDate(targetDate.getDate() + days)
-        targetDate.setHours(0, 0, 0, 0)
+    // Calculate the time window for approaching deadlines
+    const now = new Date()
+    const checkTime = new Date(now.getTime() + (hoursBeforeDeadline * 60 * 60 * 1000))
 
-        const nextDay = new Date(targetDate)
-        nextDay.setDate(nextDay.getDate() + 1)
+    try {
+      // Get tasks with deadlines approaching
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .not('deadline', 'is', null)
+        .lte('deadline', checkTime.toISOString())
+        .gte('deadline', now.toISOString())
+        .neq('status', 'completed')
 
-        const { data: tasks } = await supabase
-          .from('tasks')
-          .select('*')
-          .gte('deadline', targetDate.toISOString())
-          .lt('deadline', nextDay.toISOString())
-          .neq('status', 'completed')
+      if (error) throw error
 
-        if (tasks && tasks.length > 0) {
-          for (const task of tasks) {
-            await this.executeRule(rule, {
-              trigger_data: { task, days_until_deadline: days },
-              user_id: rule.created_by,
-              timestamp: new Date().toISOString()
+      for (const task of tasks || []) {
+        // Check if this task matches the rule conditions
+        if (this.taskMatchesConditions(task, conditions)) {
+          // Check if we've already notified about this task recently
+          const shouldExecute = await this.shouldExecuteForTask(rule.id, task.id)
+
+          if (shouldExecute) {
+            await this.executeActions(rule, {
+              trigger_data: { task, deadline: task.deadline },
+              user_id: task.assignee_id || task.created_by,
+              timestamp: now.toISOString(),
+              task_id: task.id,
+              task_data: task
             })
           }
         }
       }
+    } catch (error) {
+      console.error('❌ Error checking deadline approaching:', error)
     }
   }
 
-  private async checkOverdueTasks() {
-    const { data: rules } = await supabase
-      .from('automation_rules')
-      .select('*')
-      .eq('trigger_type', 'task_overdue')
-      .eq('is_active', true)
-
-    if (!rules) return
-
+  async checkTaskOverdue(rule: AutomationRule) {
+    const conditions = rule.trigger_conditions as TriggerConditions
     const now = new Date()
-    
-    for (const rule of rules) {
-      const hoursOverdue = rule.trigger_conditions?.hours_overdue || 24
-      const priorityLevels = rule.trigger_conditions?.priority_levels || ['high', 'medium', 'low']
 
-      const overdueThreshold = new Date(now.getTime() - (hoursOverdue * 60 * 60 * 1000))
-
-      const { data: tasks } = await supabase
+    try {
+      // Get overdue tasks
+      const { data: tasks, error } = await supabase
         .from('tasks')
         .select('*')
-        .lt('deadline', overdueThreshold.toISOString())
+        .not('deadline', 'is', null)
+        .lt('deadline', now.toISOString())
         .neq('status', 'completed')
-        .in('priority', priorityLevels)
-
-      if (tasks && tasks.length > 0) {
-        for (const task of tasks) {
-          await this.executeRule(rule, {
-            trigger_data: { task, hours_overdue: Math.floor((now.getTime() - new Date(task.deadline).getTime()) / (1000 * 60 * 60)) },
-            user_id: rule.created_by,
-            timestamp: new Date().toISOString()
-          })
-        }
-      }
-    }
-  }
-
-  private async checkTeamWorkload() {
-    const { data: rules } = await supabase
-      .from('automation_rules')
-      .select('*')
-      .eq('trigger_type', 'team_assignment')
-      .eq('is_active', true)
-
-    if (!rules) return
-
-    // Get team workload statistics
-    const { data: workloadStats } = await supabase
-      .rpc('get_team_workload_stats')
-
-    if (workloadStats) {
-      for (const rule of rules) {
-        const maxTasksPerPerson = rule.trigger_conditions?.max_tasks_per_person || 10
-        
-        const overloadedMembers = workloadStats.filter((member: any) => 
-          member.active_tasks > maxTasksPerPerson
-        )
-
-        if (overloadedMembers.length > 0) {
-          await this.executeRule(rule, {
-            trigger_data: { overloaded_members: overloadedMembers },
-            user_id: rule.created_by,
-            timestamp: new Date().toISOString()
-          })
-        }
-      }
-    }
-  }
-
-  private async handleTaskCreated(task: any) {
-    const { data: rules } = await supabase
-      .from('automation_rules')
-      .select('*')
-      .eq('trigger_type', 'event_created')
-      .eq('is_active', true)
-
-    if (!rules) return
-
-    for (const rule of rules) {
-      const eventTypes = rule.trigger_conditions?.event_types || ['all']
-      
-      if (eventTypes.includes('all') || eventTypes.includes(task.category)) {
-        await this.executeRule(rule, {
-          trigger_data: { task },
-          user_id: rule.created_by,
-          timestamp: new Date().toISOString()
-        })
-      }
-    }
-  }
-
-  private async handleTaskUpdated(oldTask: any, newTask: any) {
-    if (oldTask.status !== newTask.status) {
-      const { data: rules } = await supabase
-        .from('automation_rules')
-        .select('*')
-        .eq('trigger_type', 'status_change')
-        .eq('is_active', true)
-
-      if (!rules) return
-
-      for (const rule of rules) {
-        const fromStatus = rule.trigger_conditions?.from_status
-        const toStatus = rule.trigger_conditions?.to_status
-
-        if ((!fromStatus || fromStatus === oldTask.status) && 
-            (!toStatus || toStatus === newTask.status)) {
-          await this.executeRule(rule, {
-            trigger_data: { old_task: oldTask, new_task: newTask },
-            user_id: rule.created_by,
-            timestamp: new Date().toISOString()
-          })
-        }
-      }
-    }
-  }
-
-  private async executeRule(rule: AutomationRule, context: AutomationContext) {
-    const executionStart = Date.now()
-    let status = 'success'
-    let errorMessage = ''
-    const actionsExecuted: any[] = []
-
-    try {
-      console.log(`🤖 Executing automation rule: ${rule.name}`)
-
-      for (const action of rule.actions) {
-        try {
-          const result = await this.executeAction(action, context)
-          actionsExecuted.push({ action: action.type, result, success: true })
-        } catch (actionError: any) {
-          console.error(`Error executing action ${action.type}:`, actionError)
-          actionsExecuted.push({ action: action.type, error: actionError.message, success: false })
-          status = 'partial'
-        }
-      }
-
-      // Update execution count
-      await supabase
-        .from('automation_rules')
-        .update({ 
-          execution_count: rule.execution_count + 1,
-          last_executed: new Date().toISOString()
-        })
-        .eq('id', rule.id)
-
-    } catch (error: any) {
-      console.error(`Error executing automation rule ${rule.name}:`, error)
-      status = 'failed'
-      errorMessage = error.message
-    }
-
-    // Log execution
-    await supabase
-      .from('automation_executions')
-      .insert({
-        rule_id: rule.id,
-        trigger_data: context.trigger_data,
-        actions_executed: actionsExecuted,
-        status,
-        error_message: errorMessage || null,
-        execution_time_ms: Date.now() - executionStart
-      })
-  }
-
-  private async executeAction(action: AutomationAction, context: AutomationContext): Promise<any> {
-    switch (action.type) {
-      case 'create_task':
-        return await this.createTask(action.parameters, context)
-      
-      case 'send_notification':
-        return await this.sendNotification(action.parameters, context)
-      
-      case 'assign_team':
-        return await this.assignTeam(action.parameters, context)
-      
-      case 'update_status':
-        return await this.updateStatus(action.parameters, context)
-      
-      case 'schedule_reminder':
-        return await this.scheduleReminder(action.parameters, context)
-      
-      default:
-        throw new Error(`Unknown action type: ${action.type}`)
-    }
-  }
-
-  private async createTask(parameters: any, context: AutomationContext) {
-    const task = context.trigger_data.task
-    const newTask = {
-      title: parameters.title || `Auto: ${task?.title || 'Generated Task'}`,
-      description: parameters.description || 'Automatically created task',
-      priority: parameters.priority || 'medium',
-      status: 'pending',
-      progress: 0,
-      assignees: parameters.assignees || [],
-      project_id: task?.project_id,
-      deadline: parameters.deadline_offset ? 
-        new Date(Date.now() + (parameters.deadline_offset * 24 * 60 * 60 * 1000)).toISOString() : 
-        null,
-      created_by: context.user_id
-    }
-
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert([newTask])
-      .select()
-      .single()
-
-    if (error) throw error
-    return data
-  }
-
-  private async sendNotification(parameters: any, context: AutomationContext) {
-    const message = parameters.message || 'Automation notification'
-    const recipients = parameters.recipients || 'assignees'
-    const task = context.trigger_data.task
-
-    console.log('🔔 Automation sending notification:', { message, recipients, task: task?.title })
-
-    try {
-      // Determine who should receive the notification
-      let userIds: string[] = []
-
-      if (recipients === 'assignees' && task?.assignees) {
-        userIds = Array.isArray(task.assignees) ? task.assignees : [task.assignees]
-      } else if (recipients === 'creator' && task?.created_by) {
-        userIds = [task.created_by]
-      } else if (recipients === 'team_leads') {
-        // Get team leads
-        const { data: teamLeads } = await supabase
-          .from('users')
-          .select('id')
-          .eq('role', 'team_lead')
-        userIds = teamLeads?.map(u => u.id) || []
-      } else if (Array.isArray(recipients)) {
-        userIds = recipients
-      }
-
-      // Send notification to each recipient
-      for (const userId of userIds) {
-        if (context.trigger_data.days_until_deadline !== undefined) {
-          // This is a deadline reminder
-          await notificationService.notifyDeadlineApproaching(
-            userId,
-            task?.title || 'Task',
-            context.trigger_data.days_until_deadline * 24 // Convert days to hours
-          )
-        } else {
-          // Generic automation notification
-          await notificationService.createNotification({
-            type: 'system_alert',
-            userId,
-            title: 'Automation Alert',
-            message,
-            priority: 'medium',
-            actionUrl: '/dashboard?tab=tasks'
-          })
-        }
-      }
-
-      // Also show browser notification for immediate feedback
-      showNotification('Automation Alert', message)
-
-      console.log('✅ Automation notifications sent to', userIds.length, 'users')
-      return { message, recipients: userIds, sent_at: new Date().toISOString() }
-
-    } catch (error: any) {
-      console.error('❌ Failed to send automation notification:', error)
-      // Fallback to browser notification only
-      showNotification('Automation Alert', message)
-      return { message, recipients: 'fallback', error: error?.message || 'Unknown error', sent_at: new Date().toISOString() }
-    }
-  }
-
-  private async assignTeam(parameters: any, context: AutomationContext) {
-    const task = context.trigger_data.task || context.trigger_data.new_task
-    if (!task) return
-
-    const role = parameters.role
-    const { data: users } = await supabase
-      .from('users')
-      .select('id')
-      .eq('role', role)
-      .limit(1)
-
-    if (users && users.length > 0) {
-      const { error } = await supabase
-        .from('tasks')
-        .update({ assignees: [users[0].id] })
-        .eq('id', task.id)
 
       if (error) throw error
-      return { assigned_to: users[0].id, role }
+
+      for (const task of tasks || []) {
+        if (this.taskMatchesConditions(task, conditions)) {
+          const shouldExecute = await this.shouldExecuteForTask(rule.id, task.id)
+
+          if (shouldExecute) {
+            await this.executeActions(rule, {
+              trigger_data: { task, overdue_hours: Math.floor((now.getTime() - new Date(task.deadline).getTime()) / (1000 * 60 * 60)) },
+              user_id: task.assignee_id || task.created_by,
+              timestamp: now.toISOString(),
+              task_id: task.id,
+              task_data: task
+            })
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking overdue tasks:', error)
+    }
+  }
+
+  taskMatchesConditions(task: any, conditions: TriggerConditions): boolean {
+    // Check priority levels
+    if (conditions.priority_levels && conditions.priority_levels.length > 0) {
+      if (!conditions.priority_levels.includes(task.priority)) {
+        return false
+      }
     }
 
-    return { message: 'No users found with specified role' }
+    // Check task status
+    if (conditions.task_status && conditions.task_status.length > 0) {
+      if (!conditions.task_status.includes(task.status)) {
+        return false
+      }
+    }
+
+    // Check assignee
+    if (conditions.assignee_ids && conditions.assignee_ids.length > 0) {
+      if (!conditions.assignee_ids.includes(task.assignee_id)) {
+        return false
+      }
+    }
+
+    // Check project
+    if (conditions.project_ids && conditions.project_ids.length > 0) {
+      if (!conditions.project_ids.includes(task.project_id)) {
+        return false
+      }
+    }
+
+    return true
   }
 
-  private async updateStatus(parameters: any, context: AutomationContext) {
-    const task = context.trigger_data.task || context.trigger_data.new_task
-    if (!task) return
+  async shouldExecuteForTask(ruleId: string, taskId: string): Promise<boolean> {
+    try {
+      // Check if we've executed this rule for this task in the last hour
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
 
-    const { error } = await supabase
-      .from('tasks')
-      .update({ status: parameters.status })
-      .eq('id', task.id)
+      const { data, error } = await supabase
+        .from('automation_executions')
+        .select('*')
+        .eq('rule_id', ruleId)
+        .eq('task_id', taskId)
+        .gte('executed_at', oneHourAgo.toISOString())
+        .limit(1)
 
-    if (error) throw error
-    return { updated_status: parameters.status }
+      if (error) {
+        console.error('Error checking execution history:', error)
+        return true // Default to allowing execution
+      }
+
+      return !data || data.length === 0
+    } catch (error) {
+      console.error('Error checking execution history:', error)
+      return true
+    }
   }
 
-  private async scheduleReminder(parameters: any, context: AutomationContext) {
-    // This would integrate with a job scheduler in a real implementation
-    const reminderTime = new Date(Date.now() + (parameters.delay_hours * 60 * 60 * 1000))
-    
-    return { 
-      scheduled_for: reminderTime.toISOString(),
-      message: parameters.message 
+  async executeActions(rule: AutomationRule, context: AutomationContext) {
+    console.log(`🚀 Executing automation rule: ${rule.name}`)
+
+    for (const action of rule.actions) {
+      try {
+        await this.executeAction(action, context)
+      } catch (error) {
+        console.error(`❌ Error executing action ${action.type}:`, error)
+      }
+    }
+
+    // Record execution
+    await this.recordExecution(rule.id, context)
+
+    // Update rule execution count and last executed time
+    await supabase
+      .from('automation_rules')
+      .update({
+        execution_count: rule.execution_count + 1,
+        last_executed: new Date().toISOString()
+      })
+      .eq('id', rule.id)
+  }
+
+  async executeAction(action: AutomationAction, context: AutomationContext) {
+    switch (action.type) {
+      case 'send_notification':
+        await this.sendNotification(action, context)
+        break
+      case 'send_email':
+        await this.sendEmail(action, context)
+        break
+      case 'play_sound':
+        await this.playSound(action, context)
+        break
+      default:
+        console.log(`⚠️ Unknown action type: ${action.type}`)
+    }
+  }
+
+  async sendNotification(action: AutomationAction, context: AutomationContext) {
+    const { title, message } = action.parameters
+    const task = context.task_data
+
+    const notificationTitle = title || `Task Deadline Reminder`
+    const notificationMessage = message || `Task "${task?.title}" is due soon!`
+
+    // Send in-app notification
+    if (action.parameters.in_app !== false) {
+      showNotification(notificationTitle, notificationMessage)
+
+      // Also trigger through notification service
+      try {
+        await notificationService.createNotification({
+          type: 'system_alert',
+          userId: context.user_id,
+          title: notificationTitle,
+          message: notificationMessage,
+          priority: 'medium'
+        })
+      } catch (error) {
+        console.error('Error creating notification:', error)
+      }
+    }
+
+    // Play sound if enabled
+    if (action.parameters.sound) {
+      try {
+        await this.playNotificationSound()
+      } catch (error) {
+        console.error('Error playing notification sound:', error)
+      }
+    }
+
+    console.log(`📢 Sent notification: ${notificationTitle}`)
+  }
+
+  async sendEmail(action: AutomationAction, context: AutomationContext) {
+    // Email functionality would require email service integration
+    console.log('📧 Email notification (not implemented yet)')
+  }
+
+  async playSound(action: AutomationAction, context: AutomationContext) {
+    await this.playNotificationSound()
+  }
+
+  async playNotificationSound() {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume()
+      }
+
+      // Play a gentle notification sound
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime)
+      oscillator.type = 'sine'
+
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5)
+
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.5)
+    } catch (error) {
+      console.error('Error playing notification sound:', error)
+    }
+  }
+
+  async recordExecution(ruleId: string, context: AutomationContext) {
+    try {
+      await supabase
+        .from('automation_executions')
+        .insert({
+          rule_id: ruleId,
+          task_id: context.task_id,
+          executed_at: new Date().toISOString(),
+          context: context
+        })
+    } catch (error) {
+      console.error('Error recording execution:', error)
+    }
+  }
+
+  // Method to trigger status change automations
+  async triggerStatusChange(taskId: string, oldStatus: string, newStatus: string, userId: string) {
+    const statusChangeRules = this.rules.filter(rule => rule.trigger_type === 'status_change')
+
+    for (const rule of statusChangeRules) {
+      const conditions = rule.trigger_conditions as TriggerConditions
+
+      // Check if this status change matches the rule conditions
+      if (conditions.task_status && !conditions.task_status.includes(newStatus)) {
+        continue
+      }
+
+      try {
+        // Get task data
+        const { data: task, error } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('id', taskId)
+          .single()
+
+        if (error) throw error
+
+        if (this.taskMatchesConditions(task, conditions)) {
+          await this.executeActions(rule, {
+            trigger_data: { task, old_status: oldStatus, new_status: newStatus },
+            user_id: userId,
+            timestamp: new Date().toISOString(),
+            task_id: taskId,
+            task_data: task
+          })
+        }
+      } catch (error) {
+        console.error(`Error executing status change rule ${rule.name}:`, error)
+      }
+    }
+  }
+
+  // Method to add new rules
+  async addRule(rule: Omit<AutomationRule, 'id' | 'execution_count' | 'created_at' | 'updated_at'>) {
+    try {
+      const { data, error } = await supabase
+        .from('automation_rules')
+        .insert({
+          ...rule,
+          execution_count: 0
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Reload rules to include the new one
+      await this.loadRules()
+
+      return data
+    } catch (error) {
+      console.error('Error adding automation rule:', error)
+      throw error
+    }
+  }
+
+  // Method to update rules
+  async updateRule(id: string, updates: Partial<AutomationRule>) {
+    try {
+      const { data, error } = await supabase
+        .from('automation_rules')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Reload rules
+      await this.loadRules()
+
+      return data
+    } catch (error) {
+      console.error('Error updating automation rule:', error)
+      throw error
+    }
+  }
+
+  // Method to delete rules
+  async deleteRule(id: string) {
+    try {
+      const { error } = await supabase
+        .from('automation_rules')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Reload rules
+      await this.loadRules()
+    } catch (error) {
+      console.error('Error deleting automation rule:', error)
+      throw error
     }
   }
 }
 
-// Initialize automation engine
-export const automationEngine = AutomationEngine.getInstance()
+// Create and export singleton instance
+export const automationEngine = new AutomationEngine()
+
+// Auto-start the engine when imported
+if (typeof window !== 'undefined') {
+  automationEngine.start()
+}
