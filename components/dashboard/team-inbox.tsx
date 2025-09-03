@@ -56,7 +56,21 @@ function TeamInboxContent() {
   const [individualMessages, setIndividualMessages] = useState<Record<string, Message[]>>({})
   const [showDiagnostics, setShowDiagnostics] = useState(false)
   const [diagnosticResults, setDiagnosticResults] = useState<string[]>([])
+  const [messageDropdown, setMessageDropdown] = useState<{
+    show: boolean
+    sender: User | null
+    message: string
+    unreadCount: number
+    timestamp: string
+  }>({
+    show: false,
+    sender: null,
+    message: '',
+    unreadCount: 0,
+    timestamp: ''
+  })
   const isMountedRef = useRef(true)
+  const dropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // ✅ Load messages from cache immediately on mount
   useEffect(() => {
@@ -246,11 +260,24 @@ function TeamInboxContent() {
           if (!isOwnMessage) {
             console.log('📨 Incoming DM from another user, triggering enhanced notifications')
             try {
+              // Update unread count
+              let newUnreadCount = 0
               setUnreadCount(prev => {
-                const newCount = prev + 1
-                setUnreadMessageCount(newCount)
-                return newCount
+                newUnreadCount = prev + 1
+                setUnreadMessageCount(newUnreadCount)
+                return newUnreadCount
               })
+
+              // Find sender user object for dropdown
+              const senderUser = users.find(u => u.id === dm.sender_id) || {
+                id: dm.sender_id,
+                name: dm.sender_name,
+                email: '',
+                role: 'user'
+              }
+
+              // Show social media-style dropdown notification
+              showMessageDropdown(senderUser, dm.content, newUnreadCount)
 
               // Enhanced notification for individual messages
               notifyMessageReceived(dm.sender_name, dm.content.substring(0, 50) + (dm.content.length > 50 ? '...' : ''))
@@ -261,7 +288,7 @@ function TeamInboxContent() {
                 dm.content.substring(0, 100) + (dm.content.length > 100 ? '...' : '')
               )
 
-              // Show enhanced toast notification with action
+              // Show enhanced toast notification
               toast({
                 title: `💬 New message from ${dm.sender_name}`,
                 description: dm.content.substring(0, 100) + (dm.content.length > 100 ? '...' : ''),
@@ -328,6 +355,10 @@ function TeamInboxContent() {
   useEffect(() => {
     return () => {
       isMountedRef.current = false
+      // Clear dropdown timeout
+      if (dropdownTimeoutRef.current) {
+        clearTimeout(dropdownTimeoutRef.current)
+      }
       // Use a ref to get the latest messages value
       const currentMessages = JSON.parse(localStorage.getItem('team_messages') || '[]')
       if (currentMessages.length > 0) {
@@ -340,34 +371,117 @@ function TeamInboxContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const playDirectMessageSound = () => {
+  const playDirectMessageSound = async () => {
+    console.log('🔊 Attempting to play DM notification sound...')
+
     try {
-      // Create a more distinctive sound for direct messages
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      // Method 1: Web Audio API (preferred)
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext
+      if (AudioContext) {
+        const audioContext = new AudioContext()
 
-      // Play a sequence of tones for DM notification
-      const frequencies = [800, 1000, 800] // Higher pitched for DMs
+        // Resume audio context if suspended (required by some browsers)
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume()
+        }
 
-      frequencies.forEach((frequency, index) => {
-        setTimeout(() => {
-          const oscillator = audioContext.createOscillator()
-          const gainNode = audioContext.createGain()
+        // Play a sequence of tones for DM notification
+        const frequencies = [800, 1000, 800] // Higher pitched for DMs
 
-          oscillator.connect(gainNode)
-          gainNode.connect(audioContext.destination)
+        frequencies.forEach((frequency, index) => {
+          setTimeout(() => {
+            try {
+              const oscillator = audioContext.createOscillator()
+              const gainNode = audioContext.createGain()
 
-          oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime)
-          oscillator.type = 'sine'
+              oscillator.connect(gainNode)
+              gainNode.connect(audioContext.destination)
 
-          gainNode.gain.setValueAtTime(0.15, audioContext.currentTime)
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
+              oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime)
+              oscillator.type = 'sine'
 
-          oscillator.start(audioContext.currentTime)
-          oscillator.stop(audioContext.currentTime + 0.3)
-        }, index * 150)
-      })
+              gainNode.gain.setValueAtTime(0.2, audioContext.currentTime)
+              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
+
+              oscillator.start(audioContext.currentTime)
+              oscillator.stop(audioContext.currentTime + 0.3)
+
+              console.log(`🔊 Playing tone ${index + 1}: ${frequency}Hz`)
+            } catch (err) {
+              console.error('Error playing individual tone:', err)
+            }
+          }, index * 200)
+        })
+
+        console.log('✅ DM audio notification played successfully')
+        return
+      }
     } catch (error) {
-      console.log('Audio not supported for DM notification:', error)
+      console.warn('Web Audio API failed, trying fallback:', error)
+    }
+
+    try {
+      // Method 2: HTML5 Audio fallback
+      const audio = new Audio()
+      audio.volume = 0.3
+
+      // Create a data URL for a simple beep sound
+      const audioData = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT'
+      audio.src = audioData
+
+      await audio.play()
+      console.log('✅ Fallback audio notification played')
+    } catch (fallbackError) {
+      console.warn('Fallback audio also failed:', fallbackError)
+
+      // Method 3: System beep fallback
+      try {
+        // Try to trigger system beep
+        const utterance = new SpeechSynthesisUtterance('')
+        utterance.volume = 0.1
+        speechSynthesis.speak(utterance)
+        console.log('✅ System beep triggered as final fallback')
+      } catch (finalError) {
+        console.error('All audio methods failed:', finalError)
+      }
+    }
+  }
+
+  const showMessageDropdown = (sender: User, messageContent: string, unreadCount: number) => {
+    console.log('📱 Showing message dropdown for:', sender.name)
+
+    // Clear any existing timeout
+    if (dropdownTimeoutRef.current) {
+      clearTimeout(dropdownTimeoutRef.current)
+    }
+
+    setMessageDropdown({
+      show: true,
+      sender,
+      message: messageContent,
+      unreadCount,
+      timestamp: new Date().toLocaleTimeString()
+    })
+
+    // Auto-dismiss after 8 seconds
+    dropdownTimeoutRef.current = setTimeout(() => {
+      setMessageDropdown(prev => ({ ...prev, show: false }))
+    }, 8000)
+  }
+
+  const dismissMessageDropdown = () => {
+    if (dropdownTimeoutRef.current) {
+      clearTimeout(dropdownTimeoutRef.current)
+    }
+    setMessageDropdown(prev => ({ ...prev, show: false }))
+  }
+
+  const viewMessageFromDropdown = () => {
+    if (messageDropdown.sender) {
+      setChatMode('individual')
+      setSelectedUser(messageDropdown.sender)
+      loadIndividualMessages(messageDropdown.sender.id)
+      dismissMessageDropdown()
     }
   }
 
@@ -948,7 +1062,73 @@ function TeamInboxContent() {
   }
 
   return (
-    <div className="h-[calc(100vh-12rem)] flex flex-col space-y-4">
+    <div className="h-[calc(100vh-12rem)] flex flex-col space-y-4 relative">
+      {/* Social Media-Style Message Dropdown */}
+      <AnimatePresence>
+        {messageDropdown.show && messageDropdown.sender && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="fixed top-4 right-4 z-50 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-4 max-w-sm w-80"
+          >
+            <div className="flex items-start space-x-3">
+              {/* Profile Picture/Initials */}
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
+                  {messageDropdown.sender.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                </div>
+              </div>
+
+              {/* Message Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {messageDropdown.sender.name}
+                  </p>
+                  {messageDropdown.unreadCount > 0 && (
+                    <Badge variant="destructive" className="ml-2 px-1.5 py-0.5 text-xs">
+                      +{messageDropdown.unreadCount}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 overflow-hidden" style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical'
+                }}>
+                  {messageDropdown.message}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                  {messageDropdown.timestamp}
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end space-x-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={dismissMessageDropdown}
+                className="text-xs"
+              >
+                Dismiss
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={viewMessageFromDropdown}
+                className="text-xs"
+              >
+                View
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
