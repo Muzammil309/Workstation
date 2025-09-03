@@ -94,6 +94,13 @@ function TeamInboxContent() {
     console.log('🔄 TeamInbox: Initializing for user:', user.id)
     console.log('🔄 User details:', { id: user.id, email: user.email, name: user.name })
 
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        console.log('🔔 Notification permission:', permission)
+      })
+    }
+
     // Test database connectivity first
     testDatabaseConnectivity()
 
@@ -102,10 +109,21 @@ function TeamInboxContent() {
 
     // Set up real-time subscription for new messages
     console.log('🔄 Setting up real-time subscription for team messages...')
+    console.log('🔄 Current user ID for subscription:', user?.id)
+
     const subscription = supabase
-      .channel('team_messages_realtime')
+      .channel(`team_messages_realtime_${user?.id}`, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: user?.id }
+        }
+      })
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'team_messages' },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'team_messages'
+        },
         (payload) => {
           console.log('📨 Real-time: New team message received:', payload.new)
           const newMessage = payload.new as Message
@@ -114,7 +132,7 @@ function TeamInboxContent() {
           if (isMountedRef.current) {
             console.log('📨 Processing new team message for user:', user?.id, 'Message from:', newMessage.sender_id)
 
-            // Add message to state and cache
+            // Add message to state and cache immediately
             setMessages(prev => {
               // Prevent duplicates
               if (prev.find(m => m.id === newMessage.id)) {
@@ -151,9 +169,9 @@ function TeamInboxContent() {
                   `New team message from ${newMessage.sender_name}`,
                   newMessage.content.substring(0, 100) + (newMessage.content.length > 100 ? '...' : '')
                 )
-                console.log('📨 Notifications triggered successfully')
+                console.log('📨 Team message notifications triggered successfully')
               } catch (error) {
-                console.error('Failed to trigger message notification:', error)
+                console.error('Failed to trigger team message notification:', error)
               }
             } else {
               console.log('📨 Message from current user, no notification needed')
@@ -226,16 +244,44 @@ function TeamInboxContent() {
 
           // Notify only when the current user is the recipient (a new incoming DM)
           if (!isOwnMessage) {
-            console.log('📨 Incoming DM from another user, triggering notifications')
+            console.log('📨 Incoming DM from another user, triggering enhanced notifications')
             try {
               setUnreadCount(prev => {
                 const newCount = prev + 1
                 setUnreadMessageCount(newCount)
                 return newCount
               })
+
+              // Enhanced notification for individual messages
               notifyMessageReceived(dm.sender_name, dm.content.substring(0, 50) + (dm.content.length > 50 ? '...' : ''))
-              showNotification(`New direct message from ${dm.sender_name}`, dm.content.substring(0, 100) + (dm.content.length > 100 ? '...' : ''))
-              console.log('📨 DM notifications triggered successfully')
+
+              // Show visual notification with enhanced styling
+              showNotification(
+                `💬 New direct message from ${dm.sender_name}`,
+                dm.content.substring(0, 100) + (dm.content.length > 100 ? '...' : '')
+              )
+
+              // Show enhanced toast notification with action
+              toast({
+                title: `💬 New message from ${dm.sender_name}`,
+                description: dm.content.substring(0, 100) + (dm.content.length > 100 ? '...' : ''),
+                duration: 6000
+              })
+
+              // Play enhanced audio notification for DMs
+              playDirectMessageSound()
+
+              // Show browser notification if permission granted
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(`New message from ${dm.sender_name}`, {
+                  body: dm.content.substring(0, 100),
+                  icon: '/favicon.ico',
+                  tag: 'direct-message',
+                  requireInteraction: true
+                })
+              }
+
+              console.log('📨 Enhanced DM notifications triggered successfully')
             } catch (e) {
               console.error('Failed to trigger DM notification:', e)
             }
@@ -294,6 +340,37 @@ function TeamInboxContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const playDirectMessageSound = () => {
+    try {
+      // Create a more distinctive sound for direct messages
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+
+      // Play a sequence of tones for DM notification
+      const frequencies = [800, 1000, 800] // Higher pitched for DMs
+
+      frequencies.forEach((frequency, index) => {
+        setTimeout(() => {
+          const oscillator = audioContext.createOscillator()
+          const gainNode = audioContext.createGain()
+
+          oscillator.connect(gainNode)
+          gainNode.connect(audioContext.destination)
+
+          oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime)
+          oscillator.type = 'sine'
+
+          gainNode.gain.setValueAtTime(0.15, audioContext.currentTime)
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
+
+          oscillator.start(audioContext.currentTime)
+          oscillator.stop(audioContext.currentTime + 0.3)
+        }, index * 150)
+      })
+    } catch (error) {
+      console.log('Audio not supported for DM notification:', error)
+    }
+  }
+
   const addDiagnosticResult = (message: string) => {
     const timestamp = new Date().toLocaleTimeString()
     const logMessage = `${timestamp}: ${message}`
@@ -307,7 +384,7 @@ function TeamInboxContent() {
 
     try {
       // Test basic connection
-      const { data, error } = await supabase.from('team_messages').select('count')
+      const { error } = await supabase.from('team_messages').select('count')
       if (error) {
         console.error('❌ Database connectivity test failed:', error)
         console.error('   Error code:', error.code)
