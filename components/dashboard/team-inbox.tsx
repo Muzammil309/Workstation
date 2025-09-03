@@ -91,20 +91,24 @@ function TeamInboxContent() {
     loadUsers()
 
     // Set up real-time subscription for new messages
+    console.log('🔄 Setting up real-time subscription for team messages...')
     const subscription = supabase
       .channel('team_messages_realtime')
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'team_messages' },
         (payload) => {
-          console.log('📨 New message received:', payload.new)
+          console.log('📨 Real-time: New team message received:', payload.new)
           const newMessage = payload.new as Message
 
           // Only update state if component is still mounted
           if (isMountedRef.current) {
+            console.log('📨 Processing new team message for user:', user?.id, 'Message from:', newMessage.sender_id)
+
             // Add message to state and cache
             setMessages(prev => {
               // Prevent duplicates
               if (prev.find(m => m.id === newMessage.id)) {
+                console.log('📨 Duplicate message detected, skipping:', newMessage.id)
                 return prev
               }
               const updated = [...prev, newMessage].sort((a, b) =>
@@ -112,11 +116,13 @@ function TeamInboxContent() {
               )
               // Immediately cache the updated messages
               localStorage.setItem('team_messages', JSON.stringify(updated))
+              console.log('📨 Team message added to state and cache. Total messages:', updated.length)
               return updated
             })
 
             // If message is from another user, trigger notification
             if (newMessage.sender_id !== user?.id) {
+              console.log('📨 Message from another user, triggering notifications')
               setUnreadCount(prev => {
                 const newCount = prev + 1
                 setUnreadMessageCount(newCount)
@@ -132,15 +138,18 @@ function TeamInboxContent() {
 
                 // Also show legacy notification
                 showNotification(
-                  `New message from ${newMessage.sender_name}`,
+                  `New team message from ${newMessage.sender_name}`,
                   newMessage.content.substring(0, 100) + (newMessage.content.length > 100 ? '...' : '')
                 )
+                console.log('📨 Notifications triggered successfully')
               } catch (error) {
                 console.error('Failed to trigger message notification:', error)
               }
+            } else {
+              console.log('📨 Message from current user, no notification needed')
             }
-
-
+          } else {
+            console.log('📨 Component unmounted, ignoring message')
           }
         }
       )
@@ -163,37 +172,51 @@ function TeamInboxContent() {
         }
       )
       .subscribe((status) => {
-        console.log('📡 Subscription status:', status)
+        console.log('📡 Team messages subscription status:', status)
         // Only update state if component is still mounted
         if (isMountedRef.current) {
           setIsConnected(status === 'SUBSCRIBED')
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Team messages real-time subscription active')
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ Team messages subscription error')
+          }
         }
       })
 
 
     // Subscribe to individual messages in real-time
+    console.log('🔄 Setting up real-time subscription for individual messages...')
     const dmSub = supabase
       .channel('individual_messages_realtime')
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'individual_messages', filter: `or(sender_id.eq.${user?.id},recipient_id.eq.${user?.id})` },
         (payload) => {
+          console.log('📨 Real-time: New individual message received:', payload.new)
           const dm = payload.new as any
           if (!isMountedRef.current) return
 
           const isOwnMessage = dm.sender_id === user?.id
           const otherId = isOwnMessage ? dm.recipient_id : dm.sender_id
 
+          console.log('📨 Processing individual message. Own message:', isOwnMessage, 'Other user ID:', otherId)
+
           setIndividualMessages(prev => {
             const list = prev[otherId] || []
-            if (list.find((m: any) => m.id === dm.id)) return prev
+            if (list.find((m: any) => m.id === dm.id)) {
+              console.log('📨 Duplicate individual message detected, skipping:', dm.id)
+              return prev
+            }
             const updated = [...list, dm].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
             const cachedKey = `individual_messages_${otherId}`
             localStorage.setItem(cachedKey, JSON.stringify(updated))
+            console.log('📨 Individual message added to state and cache for user:', otherId, 'Total messages:', updated.length)
             return { ...prev, [otherId]: updated }
           })
 
           // Notify only when the current user is the recipient (a new incoming DM)
           if (!isOwnMessage) {
+            console.log('📨 Incoming DM from another user, triggering notifications')
             try {
               setUnreadCount(prev => {
                 const newCount = prev + 1
@@ -202,13 +225,18 @@ function TeamInboxContent() {
               })
               notifyMessageReceived(dm.sender_name, dm.content.substring(0, 50) + (dm.content.length > 50 ? '...' : ''))
               showNotification(`New direct message from ${dm.sender_name}`, dm.content.substring(0, 100) + (dm.content.length > 100 ? '...' : ''))
+              console.log('📨 DM notifications triggered successfully')
             } catch (e) {
               console.error('Failed to trigger DM notification:', e)
             }
+          } else {
+            console.log('📨 Own DM message, no notification needed')
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📡 Individual messages subscription status:', status)
+      })
 
     // Cleanup
     return () => {
@@ -393,13 +421,20 @@ function TeamInboxContent() {
         created_at: new Date().toISOString()
       }
 
+      console.log('📤 Individual message data:', messageData)
+
       const { data, error } = await supabase
         .from('individual_messages')
         .insert([messageData])
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Database error:', error)
+        throw error
+      }
+
+      console.log('✅ Individual message saved to database:', data)
 
       // Update local state and cache
       setIndividualMessages(prev => {
@@ -408,45 +443,55 @@ function TeamInboxContent() {
         const cachedKey = `individual_messages_${selectedUser.id}`
         localStorage.setItem(cachedKey, JSON.stringify(sorted))
         return { ...prev, [selectedUser.id]: sorted }
-
-      // Fallback: write a local pending message if DB insert fails
-      const localDm: Message = {
-        id: `local-${Date.now()}`,
-        content: messageData.content,
-        sender_id: messageData.sender_id!,
-        sender_name: messageData.sender_name,
-        sender_email: user?.email || '',
-        created_at: new Date().toISOString(),
-        is_read: false,
-        message_type: 'text'
-      }
-      if (!selectedUser) throw new Error('No recipient selected')
-      const recipientId = selectedUser!.id
-      setIndividualMessages(prev => {
-        const updated: Message[] = [...(prev[recipientId] || []), localDm]
-        const cachedKey = `individual_messages_${recipientId}`
-        localStorage.setItem(cachedKey, JSON.stringify(updated))
-        return { ...prev, [recipientId]: updated }
       })
-
-      })
-
-      // Cache the updated messages
-      const updatedMessages = [...(individualMessages[selectedUser.id] || []), data]
-      const cachedKey = `individual_messages_${selectedUser.id}`
-      localStorage.setItem(cachedKey, JSON.stringify(updatedMessages))
-      localStorage.setItem('individual_messages', JSON.stringify({ ...individualMessages, [selectedUser.id]: updatedMessages }))
 
       setNewMessage('')
       console.log('✅ Individual message sent successfully')
 
+      toast({
+        title: "Message sent",
+        description: `Message sent to ${selectedUser.name}`,
+      })
+
     } catch (error: any) {
       console.error('❌ Error sending individual message:', error)
-      toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
-        variant: "destructive"
-      })
+
+      // Fallback: write a local pending message if DB insert fails
+      try {
+        const localDm: Message = {
+          id: `local-${Date.now()}`,
+          content: newMessage.trim(),
+          sender_id: user?.id || '',
+          sender_name: user?.name || user?.email || 'Unknown',
+          sender_email: user?.email || '',
+          created_at: new Date().toISOString(),
+          is_read: false,
+          message_type: 'text'
+        }
+
+        setIndividualMessages(prev => {
+          const updated: Message[] = [...(prev[selectedUser.id] || []), localDm]
+          const cachedKey = `individual_messages_${selectedUser.id}`
+          localStorage.setItem(cachedKey, JSON.stringify(updated))
+          return { ...prev, [selectedUser.id]: updated }
+        })
+
+        setNewMessage('')
+        console.log('📝 Message added to local state as fallback')
+
+        toast({
+          title: "Message saved locally",
+          description: "Message saved locally. Will sync when connection is restored.",
+          variant: "default"
+        })
+      } catch (fallbackError) {
+        console.error('❌ Fallback also failed:', fallbackError)
+        toast({
+          title: "Error",
+          description: "Failed to send message. Please try again.",
+          variant: "destructive"
+        })
+      }
     }
   }
 
@@ -485,11 +530,12 @@ function TeamInboxContent() {
           throw error
         }
 
-        console.log('✅ Message saved to database:', data)
+        console.log('✅ Team message saved to database:', data)
         setMessages(prev => {
-          const updated = [...prev, data]
+          const updated = [...prev, data].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
           // Update cache
           localStorage.setItem('team_messages', JSON.stringify(updated))
+          console.log('📤 Team message added to local state. Total messages:', updated.length)
           return updated
         })
       } catch (dbError) {
