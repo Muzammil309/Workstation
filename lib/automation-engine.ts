@@ -57,23 +57,36 @@ class AutomationEngine {
   private lastCheck = new Date()
 
   async start() {
-    if (this.isRunning) return
+    if (this.isRunning) {
+      console.log('🤖 Automation Engine already running')
+      return
+    }
 
     console.log('🤖 Starting Automation Engine...')
     this.isRunning = true
 
-    // Load active rules
-    await this.loadRules()
+    try {
+      // Load active rules
+      await this.loadRules()
 
-    // Start periodic checks every minute
-    this.intervalId = setInterval(() => {
+      // Start periodic checks every minute
+      this.intervalId = setInterval(() => {
+        this.checkTriggers()
+      }, 60000) // Check every minute
+
+      // Initial check
       this.checkTriggers()
-    }, 60000) // Check every minute
 
-    // Initial check
-    this.checkTriggers()
+      console.log('✅ Automation Engine started successfully')
+    } catch (error) {
+      console.error('❌ Failed to start Automation Engine:', error)
+      this.isRunning = false
+      throw error
+    }
+  }
 
-    console.log('✅ Automation Engine started')
+  isInitialized() {
+    return this.isRunning
   }
 
   async stop() {
@@ -92,18 +105,24 @@ class AutomationEngine {
 
   async loadRules() {
     try {
+      console.log('📋 Loading automation rules...')
       const { data, error } = await supabase
         .from('automation_rules')
         .select('*')
         .eq('is_active', true)
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Error loading automation rules:', error)
+        throw error
+      }
 
       this.rules = data || []
-      console.log(`📋 Loaded ${this.rules.length} active automation rules`)
+      console.log(`✅ Loaded ${this.rules.length} active automation rules`)
+      return this.rules
     } catch (error) {
       console.error('❌ Error loading automation rules:', error)
       this.rules = []
+      throw error
     }
   }
 
@@ -442,23 +461,42 @@ class AutomationEngine {
   // Method to add new rules
   async addRule(rule: Omit<AutomationRule, 'id' | 'execution_count' | 'created_at' | 'updated_at'>) {
     try {
+      console.log('🔧 Automation engine adding rule:', rule)
+
+      const ruleToInsert = {
+        ...rule,
+        execution_count: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      console.log('💾 Inserting rule into database:', ruleToInsert)
+
       const { data, error } = await supabase
         .from('automation_rules')
-        .insert({
-          ...rule,
-          execution_count: 0
-        })
+        .insert(ruleToInsert)
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Database insert error in automation engine:', error)
+        throw error
+      }
 
-      // Reload rules to include the new one
-      await this.loadRules()
+      console.log('✅ Rule inserted successfully:', data)
+
+      // Reload rules to include the new one (but don't fail if this fails)
+      try {
+        await this.loadRules()
+        console.log('✅ Rules reloaded successfully')
+      } catch (reloadError) {
+        console.warn('⚠️ Failed to reload rules after insert:', reloadError)
+        // Don't throw here, the rule was created successfully
+      }
 
       return data
     } catch (error) {
-      console.error('Error adding automation rule:', error)
+      console.error('❌ Error adding automation rule in engine:', error)
       throw error
     }
   }

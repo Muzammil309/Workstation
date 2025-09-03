@@ -223,6 +223,23 @@ function AutomationCenterContent() {
   useEffect(() => {
     loadAutomationData()
     loadUsers()
+
+    // Initialize automation engine if not already running
+    const initializeEngine = async () => {
+      try {
+        if (!automationEngine.isInitialized()) {
+          console.log('🔧 Initializing automation engine...')
+          await automationEngine.start()
+          console.log('✅ Automation engine initialized')
+        } else {
+          console.log('✅ Automation engine already running')
+        }
+      } catch (error) {
+        console.error('❌ Failed to initialize automation engine:', error)
+      }
+    }
+
+    initializeEngine()
   }, [loadAutomationData])
 
   const loadUsers = async () => {
@@ -276,10 +293,21 @@ function AutomationCenterContent() {
 
   const createAutomationRule = async () => {
     try {
+      console.log('🔧 Starting rule creation process...')
+
       if (!newRuleData.name.trim()) {
         toast({
           title: "Error",
           description: "Rule name is required",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (!user?.id) {
+        toast({
+          title: "Error",
+          description: "User not authenticated",
           variant: "destructive"
         })
         return
@@ -292,11 +320,52 @@ function AutomationCenterContent() {
         trigger_conditions: newRuleData.trigger_conditions,
         actions: newRuleData.actions,
         is_active: newRuleData.is_active,
-        created_by: user?.id || ''
+        created_by: user.id
       }
 
-      // Use the automation engine to create the rule
-      const createdRule = await automationEngine.addRule(ruleToCreate)
+      console.log('📝 Rule data to create:', ruleToCreate)
+
+      // Try direct database insert first, then use automation engine
+      let createdRule
+      try {
+        console.log('💾 Attempting direct database insert...')
+        const { data, error } = await supabase
+          .from('automation_rules')
+          .insert({
+            ...ruleToCreate,
+            execution_count: 0
+          })
+          .select()
+          .single()
+
+        if (error) {
+          console.error('❌ Database insert error:', error)
+          throw error
+        }
+
+        createdRule = data
+        console.log('✅ Direct database insert successful:', createdRule)
+
+        // Try to reload automation engine rules
+        try {
+          await automationEngine.loadRules()
+          console.log('✅ Automation engine rules reloaded')
+        } catch (engineError) {
+          console.warn('⚠️ Failed to reload automation engine rules:', engineError)
+        }
+
+      } catch (dbError) {
+        console.error('❌ Direct database insert failed, trying automation engine:', dbError)
+
+        // Fallback to automation engine
+        try {
+          createdRule = await automationEngine.addRule(ruleToCreate)
+          console.log('✅ Automation engine insert successful:', createdRule)
+        } catch (engineError: any) {
+          console.error('❌ Automation engine insert also failed:', engineError)
+          throw new Error(`Database insert failed: ${(dbError as any)?.message || 'Unknown database error'}. Engine insert failed: ${engineError?.message || 'Unknown engine error'}`)
+        }
+      }
 
       // Update local state
       setAutomationRules(prev => [createdRule, ...prev])
@@ -330,11 +399,15 @@ function AutomationCenterContent() {
         title: "Success",
         description: "Automation rule created successfully",
       })
+
+      console.log('🎉 Rule creation completed successfully')
     } catch (error: any) {
-      console.error('Error creating rule:', error)
+      console.error('❌ Error creating automation rule:', error)
+      console.error('❌ Error stack:', error.stack)
+
       toast({
         title: "Error",
-        description: "Failed to create automation rule",
+        description: `Failed to create automation rule: ${error.message || 'Unknown error'}`,
         variant: "destructive"
       })
     }
@@ -1103,7 +1176,13 @@ function AutomationCenterContent() {
             <Button variant="outline" onClick={() => setShowCreateRule(false)}>
               Cancel
             </Button>
-            <Button onClick={createAutomationRule}>
+            <Button
+              onClick={() => {
+                console.log('🔘 Create Rule button clicked')
+                console.log('📝 Current form data:', newRuleData)
+                createAutomationRule()
+              }}
+            >
               Create Rule
             </Button>
           </div>
