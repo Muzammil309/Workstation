@@ -139,6 +139,8 @@ function TeamInboxContent() {
                 console.error('Failed to trigger message notification:', error)
               }
             }
+
+
           }
         }
       )
@@ -173,21 +175,37 @@ function TeamInboxContent() {
     const dmSub = supabase
       .channel('individual_messages_realtime')
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'individual_messages' },
+        { event: 'INSERT', schema: 'public', table: 'individual_messages', filter: `or(sender_id.eq.${user?.id},recipient_id.eq.${user?.id})` },
         (payload) => {
           const dm = payload.new as any
-          // Only update if this message belongs to current conversation
           if (!isMountedRef.current) return
-          const otherId = dm.sender_id === user?.id ? dm.recipient_id : dm.sender_id
+
+          const isOwnMessage = dm.sender_id === user?.id
+          const otherId = isOwnMessage ? dm.recipient_id : dm.sender_id
+
           setIndividualMessages(prev => {
             const list = prev[otherId] || []
             if (list.find((m: any) => m.id === dm.id)) return prev
             const updated = [...list, dm].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-            // Cache per-conversation
             const cachedKey = `individual_messages_${otherId}`
             localStorage.setItem(cachedKey, JSON.stringify(updated))
             return { ...prev, [otherId]: updated }
           })
+
+          // Notify only when the current user is the recipient (a new incoming DM)
+          if (!isOwnMessage) {
+            try {
+              setUnreadCount(prev => {
+                const newCount = prev + 1
+                setUnreadMessageCount(newCount)
+                return newCount
+              })
+              notifyMessageReceived(dm.sender_name, dm.content.substring(0, 50) + (dm.content.length > 50 ? '...' : ''))
+              showNotification(`New direct message from ${dm.sender_name}`, dm.content.substring(0, 100) + (dm.content.length > 100 ? '...' : ''))
+            } catch (e) {
+              console.error('Failed to trigger DM notification:', e)
+            }
+          }
         }
       )
       .subscribe()
