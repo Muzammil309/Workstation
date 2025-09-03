@@ -54,6 +54,7 @@ function TeamInboxContent() {
   const [chatMode, setChatMode] = useState<'team' | 'individual'>('team')
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [individualMessages, setIndividualMessages] = useState<Record<string, Message[]>>({})
+  const [individualUnreadCounts, setIndividualUnreadCounts] = useState<Record<string, number>>({})
   const [showDiagnostics, setShowDiagnostics] = useState(false)
   const [diagnosticResults, setDiagnosticResults] = useState<string[]>([])
   const [messageDropdown, setMessageDropdown] = useState<{
@@ -120,15 +121,16 @@ function TeamInboxContent() {
 
     loadMessages()
     loadUsers()
+    loadIndividualUnreadCounts()
 
     // Set up real-time subscription for new messages
     console.log('🔄 Setting up real-time subscription for team messages...')
     console.log('🔄 Current user ID for subscription:', user?.id)
 
     const subscription = supabase
-      .channel(`team_messages_realtime_${user?.id}`, {
+      .channel('team_messages_global', {
         config: {
-          broadcast: { self: true },
+          broadcast: { self: false },
           presence: { key: user?.id }
         }
       })
@@ -162,9 +164,9 @@ function TeamInboxContent() {
               return updated
             })
 
-            // If message is from another user, trigger notification
+            // If message is from another user, trigger notification and audio
             if (newMessage.sender_id !== user?.id) {
-              console.log('📨 Message from another user, triggering notifications')
+              console.log('📨 Message from another user, triggering notifications and audio')
               setUnreadCount(prev => {
                 const newCount = prev + 1
                 setUnreadMessageCount(newCount)
@@ -183,7 +185,11 @@ function TeamInboxContent() {
                   `New team message from ${newMessage.sender_name}`,
                   newMessage.content.substring(0, 100) + (newMessage.content.length > 100 ? '...' : '')
                 )
-                console.log('📨 Team message notifications triggered successfully')
+
+                // Play standard notification sound for team messages
+                playTeamMessageSound()
+
+                console.log('📨 Team message notifications and audio triggered successfully')
               } catch (error) {
                 console.error('Failed to trigger team message notification:', error)
               }
@@ -256,11 +262,23 @@ function TeamInboxContent() {
             return { ...prev, [otherId]: updated }
           })
 
+          // Update individual unread counts
+          if (!isOwnMessage) {
+            setIndividualUnreadCounts(prev => {
+              const currentCount = prev[otherId] || 0
+              const newCount = currentCount + 1
+              const updated = { ...prev, [otherId]: newCount }
+              localStorage.setItem('individual_unread_counts', JSON.stringify(updated))
+              console.log('📨 Updated unread count for user:', otherId, 'New count:', newCount)
+              return updated
+            })
+          }
+
           // Notify only when the current user is the recipient (a new incoming DM)
           if (!isOwnMessage) {
             console.log('📨 Incoming DM from another user, triggering enhanced notifications')
             try {
-              // Update unread count
+              // Update global unread count
               let newUnreadCount = 0
               setUnreadCount(prev => {
                 newUnreadCount = prev + 1
@@ -276,8 +294,11 @@ function TeamInboxContent() {
                 role: 'user'
               }
 
+              // Get individual unread count for this user
+              const individualCount = (individualUnreadCounts[otherId] || 0) + 1
+
               // Show social media-style dropdown notification
-              showMessageDropdown(senderUser, dm.content, newUnreadCount)
+              showMessageDropdown(senderUser, dm.content, individualCount)
 
               // Enhanced notification for individual messages
               notifyMessageReceived(dm.sender_name, dm.content.substring(0, 50) + (dm.content.length > 50 ? '...' : ''))
@@ -371,8 +392,8 @@ function TeamInboxContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const playDirectMessageSound = async () => {
-    console.log('🔊 Attempting to play DM notification sound...')
+  const playAudioNotification = async (frequencies: number[], label: string) => {
+    console.log(`🔊 Attempting to play ${label} notification sound...`)
 
     try {
       // Method 1: Web Audio API (preferred)
@@ -383,12 +404,11 @@ function TeamInboxContent() {
         // Resume audio context if suspended (required by some browsers)
         if (audioContext.state === 'suspended') {
           await audioContext.resume()
+          console.log('🔊 Audio context resumed')
         }
 
-        // Play a sequence of tones for DM notification
-        const frequencies = [800, 1000, 800] // Higher pitched for DMs
-
-        frequencies.forEach((frequency, index) => {
+        // Play a sequence of tones
+        for (let i = 0; i < frequencies.length; i++) {
           setTimeout(() => {
             try {
               const oscillator = audioContext.createOscillator()
@@ -397,54 +417,63 @@ function TeamInboxContent() {
               oscillator.connect(gainNode)
               gainNode.connect(audioContext.destination)
 
-              oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime)
+              oscillator.frequency.setValueAtTime(frequencies[i], audioContext.currentTime)
               oscillator.type = 'sine'
 
-              gainNode.gain.setValueAtTime(0.2, audioContext.currentTime)
-              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
+              gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4)
 
               oscillator.start(audioContext.currentTime)
-              oscillator.stop(audioContext.currentTime + 0.3)
+              oscillator.stop(audioContext.currentTime + 0.4)
 
-              console.log(`🔊 Playing tone ${index + 1}: ${frequency}Hz`)
+              console.log(`🔊 Playing ${label} tone ${i + 1}: ${frequencies[i]}Hz`)
             } catch (err) {
-              console.error('Error playing individual tone:', err)
+              console.error(`Error playing ${label} tone:`, err)
             }
-          }, index * 200)
-        })
+          }, i * 250)
+        }
 
-        console.log('✅ DM audio notification played successfully')
+        console.log(`✅ ${label} audio notification played successfully`)
         return
       }
     } catch (error) {
-      console.warn('Web Audio API failed, trying fallback:', error)
+      console.warn(`Web Audio API failed for ${label}, trying fallback:`, error)
     }
 
     try {
       // Method 2: HTML5 Audio fallback
       const audio = new Audio()
-      audio.volume = 0.3
+      audio.volume = 0.4
 
-      // Create a data URL for a simple beep sound
+      // Create a simple beep sound data URL
       const audioData = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT'
       audio.src = audioData
 
       await audio.play()
-      console.log('✅ Fallback audio notification played')
+      console.log(`✅ ${label} fallback audio notification played`)
     } catch (fallbackError) {
-      console.warn('Fallback audio also failed:', fallbackError)
+      console.warn(`Fallback audio also failed for ${label}:`, fallbackError)
 
       // Method 3: System beep fallback
       try {
-        // Try to trigger system beep
         const utterance = new SpeechSynthesisUtterance('')
-        utterance.volume = 0.1
+        utterance.volume = 0.2
         speechSynthesis.speak(utterance)
-        console.log('✅ System beep triggered as final fallback')
+        console.log(`✅ ${label} system beep triggered as final fallback`)
       } catch (finalError) {
-        console.error('All audio methods failed:', finalError)
+        console.error(`All ${label} audio methods failed:`, finalError)
       }
     }
+  }
+
+  const playDirectMessageSound = async () => {
+    // Distinctive 3-tone pattern for individual messages
+    await playAudioNotification([800, 1000, 800], 'DM')
+  }
+
+  const playTeamMessageSound = async () => {
+    // Single tone for team messages
+    await playAudioNotification([600], 'team message')
   }
 
   const showMessageDropdown = (sender: User, messageContent: string, unreadCount: number) => {
@@ -482,6 +511,19 @@ function TeamInboxContent() {
       setSelectedUser(messageDropdown.sender)
       loadIndividualMessages(messageDropdown.sender.id)
       dismissMessageDropdown()
+    }
+  }
+
+  const loadIndividualUnreadCounts = () => {
+    try {
+      const cached = localStorage.getItem('individual_unread_counts')
+      if (cached) {
+        const counts = JSON.parse(cached)
+        setIndividualUnreadCounts(counts)
+        console.log('📦 Loaded individual unread counts:', counts)
+      }
+    } catch (error) {
+      console.error('Error loading individual unread counts:', error)
     }
   }
 
@@ -711,6 +753,14 @@ function TeamInboxContent() {
   const loadIndividualMessages = async (otherUserId: string) => {
     try {
       console.log('📥 Loading individual messages with user:', otherUserId)
+
+      // Clear unread count for this user when opening conversation
+      setIndividualUnreadCounts(prev => {
+        const updated = { ...prev, [otherUserId]: 0 }
+        localStorage.setItem('individual_unread_counts', JSON.stringify(updated))
+        console.log('📨 Cleared unread count for user:', otherUserId)
+        return updated
+      })
 
       const { data, error } = await supabase
         .from('individual_messages')
@@ -1204,25 +1254,33 @@ function TeamInboxContent() {
               <span className="text-sm font-medium">Select a team member to chat with:</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-              {users.map((user) => (
-                <Button
-                  key={user.id}
-                  variant={selectedUser?.id === user.id ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    setSelectedUser(user)
-                    loadIndividualMessages(user.id)
-                  }}
-                  className="justify-start text-left"
-                >
-                  <div className="flex items-center space-x-2">
-                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
-                      {getUserInitials(user.name)}
+              {users.map((user) => {
+                const unreadCount = individualUnreadCounts[user.id] || 0
+                return (
+                  <Button
+                    key={user.id}
+                    variant={selectedUser?.id === user.id ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => {
+                      setSelectedUser(user)
+                      loadIndividualMessages(user.id)
+                    }}
+                    className="justify-start text-left relative"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
+                        {getUserInitials(user.name)}
+                      </div>
+                      <span className="truncate">{user.name}</span>
+                      {unreadCount > 0 && (
+                        <Badge variant="destructive" className="ml-auto px-1.5 py-0.5 text-xs">
+                          +{unreadCount}
+                        </Badge>
+                      )}
                     </div>
-                    <span className="truncate">{user.name}</span>
-                  </div>
-                </Button>
-              ))}
+                  </Button>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
