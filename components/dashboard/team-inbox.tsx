@@ -2,13 +2,29 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, MessageSquare, Users, Bell, Search, MoreVertical, Paperclip, Smile } from 'lucide-react'
+import { Send, MessageSquare, Users, Bell, Search, MoreVertical, Paperclip, Smile, Edit, Trash2, Eraser } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
@@ -70,6 +86,21 @@ function TeamInboxContent() {
     unreadCount: 0,
     timestamp: ''
   })
+  const [editingMessage, setEditingMessage] = useState<{
+    id: string
+    content: string
+    isTeamMessage: boolean
+  } | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{
+    show: boolean
+    messageId: string
+    isTeamMessage: boolean
+  }>({
+    show: false,
+    messageId: '',
+    isTeamMessage: false
+  })
+  const [showClearChatConfirm, setShowClearChatConfirm] = useState(false)
   const isMountedRef = useRef(true)
   const dropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -204,7 +235,7 @@ function TeamInboxContent() {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'team_messages' },
         (payload) => {
-          console.log('📝 Message updated:', payload.new)
+          console.log('📝 Team message updated:', payload.new)
           const updatedMessage = payload.new as Message
           // Only update state if component is still mounted
           if (isMountedRef.current) {
@@ -212,6 +243,22 @@ function TeamInboxContent() {
               const updated = prev.map(msg =>
                 msg.id === updatedMessage.id ? updatedMessage : msg
               )
+              // Cache the updated messages
+              localStorage.setItem('team_messages', JSON.stringify(updated))
+              return updated
+            })
+          }
+        }
+      )
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'team_messages' },
+        (payload) => {
+          console.log('🗑️ Team message deleted:', payload.old)
+          const deletedMessage = payload.old as Message
+          // Only update state if component is still mounted
+          if (isMountedRef.current) {
+            setMessages(prev => {
+              const updated = prev.filter(msg => msg.id !== deletedMessage.id)
               // Cache the updated messages
               localStorage.setItem('team_messages', JSON.stringify(updated))
               return updated
@@ -336,6 +383,44 @@ function TeamInboxContent() {
           } else {
             console.log('📨 Own DM message, no notification needed')
           }
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'individual_messages', filter: `or(sender_id.eq.${user?.id},recipient_id.eq.${user?.id})` },
+        (payload) => {
+          console.log('📝 Individual message updated:', payload.new)
+          const updatedMessage = payload.new as any
+          if (!isMountedRef.current) return
+
+          const isOwnMessage = updatedMessage.sender_id === user?.id
+          const otherId = isOwnMessage ? updatedMessage.recipient_id : updatedMessage.sender_id
+
+          setIndividualMessages(prev => {
+            const list = prev[otherId] || []
+            const updated = list.map((m: any) => m.id === updatedMessage.id ? updatedMessage : m)
+            const cachedKey = `individual_messages_${otherId}`
+            localStorage.setItem(cachedKey, JSON.stringify(updated))
+            return { ...prev, [otherId]: updated }
+          })
+        }
+      )
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'individual_messages', filter: `or(sender_id.eq.${user?.id},recipient_id.eq.${user?.id})` },
+        (payload) => {
+          console.log('🗑️ Individual message deleted:', payload.old)
+          const deletedMessage = payload.old as any
+          if (!isMountedRef.current) return
+
+          const isOwnMessage = deletedMessage.sender_id === user?.id
+          const otherId = isOwnMessage ? deletedMessage.recipient_id : deletedMessage.sender_id
+
+          setIndividualMessages(prev => {
+            const list = prev[otherId] || []
+            const updated = list.filter((m: any) => m.id !== deletedMessage.id)
+            const cachedKey = `individual_messages_${otherId}`
+            localStorage.setItem(cachedKey, JSON.stringify(updated))
+            return { ...prev, [otherId]: updated }
+          })
         }
       )
       .subscribe((status) => {
@@ -524,6 +609,213 @@ function TeamInboxContent() {
       }
     } catch (error) {
       console.error('Error loading individual unread counts:', error)
+    }
+  }
+
+  // Message Edit Functions
+  const startEditMessage = (messageId: string, content: string, isTeamMessage: boolean) => {
+    setEditingMessage({
+      id: messageId,
+      content,
+      isTeamMessage
+    })
+  }
+
+  const cancelEditMessage = () => {
+    setEditingMessage(null)
+  }
+
+  const saveEditMessage = async () => {
+    if (!editingMessage || !editingMessage.content.trim()) {
+      toast({
+        title: "Error",
+        description: "Message content cannot be empty",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const table = editingMessage.isTeamMessage ? 'team_messages' : 'individual_messages'
+      const { error } = await supabase
+        .from(table)
+        .update({
+          content: editingMessage.content.trim(),
+          edited_at: new Date().toISOString(),
+          is_edited: true
+        })
+        .eq('id', editingMessage.id)
+        .eq('sender_id', user?.id) // Ensure user can only edit their own messages
+
+      if (error) {
+        console.error('Error editing message:', error)
+        toast({
+          title: "Error",
+          description: "Failed to edit message. Please try again.",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Update local state
+      if (editingMessage.isTeamMessage) {
+        setMessages(prev => prev.map(msg =>
+          msg.id === editingMessage.id
+            ? { ...msg, content: editingMessage.content, edited_at: new Date().toISOString(), is_edited: true }
+            : msg
+        ))
+      } else if (selectedUser) {
+        setIndividualMessages(prev => ({
+          ...prev,
+          [selectedUser.id]: (prev[selectedUser.id] || []).map(msg =>
+            msg.id === editingMessage.id
+              ? { ...msg, content: editingMessage.content, edited_at: new Date().toISOString(), is_edited: true }
+              : msg
+          )
+        }))
+      }
+
+      setEditingMessage(null)
+      toast({
+        title: "Message edited",
+        description: "Your message has been updated successfully"
+      })
+
+    } catch (error) {
+      console.error('Error editing message:', error)
+      toast({
+        title: "Error",
+        description: "Failed to edit message. Please try again.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Message Delete Functions
+  const confirmDeleteMessage = (messageId: string, isTeamMessage: boolean) => {
+    setShowDeleteConfirm({
+      show: true,
+      messageId,
+      isTeamMessage
+    })
+  }
+
+  const cancelDeleteMessage = () => {
+    setShowDeleteConfirm({
+      show: false,
+      messageId: '',
+      isTeamMessage: false
+    })
+  }
+
+  const deleteMessage = async () => {
+    if (!showDeleteConfirm.messageId) return
+
+    try {
+      const table = showDeleteConfirm.isTeamMessage ? 'team_messages' : 'individual_messages'
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .eq('id', showDeleteConfirm.messageId)
+        .eq('sender_id', user?.id) // Ensure user can only delete their own messages
+
+      if (error) {
+        console.error('Error deleting message:', error)
+        toast({
+          title: "Error",
+          description: "Failed to delete message. Please try again.",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Update local state
+      if (showDeleteConfirm.isTeamMessage) {
+        setMessages(prev => prev.filter(msg => msg.id !== showDeleteConfirm.messageId))
+        // Update cache
+        const updatedMessages = messages.filter(msg => msg.id !== showDeleteConfirm.messageId)
+        localStorage.setItem('team_messages', JSON.stringify(updatedMessages))
+      } else if (selectedUser) {
+        setIndividualMessages(prev => ({
+          ...prev,
+          [selectedUser.id]: (prev[selectedUser.id] || []).filter(msg => msg.id !== showDeleteConfirm.messageId)
+        }))
+        // Update cache
+        const cachedKey = `individual_messages_${selectedUser.id}`
+        const updatedMessages = (individualMessages[selectedUser.id] || []).filter(msg => msg.id !== showDeleteConfirm.messageId)
+        localStorage.setItem(cachedKey, JSON.stringify(updatedMessages))
+      }
+
+      cancelDeleteMessage()
+      toast({
+        title: "Message deleted",
+        description: "Your message has been removed"
+      })
+
+    } catch (error) {
+      console.error('Error deleting message:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete message. Please try again.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Clear Chat Functions
+  const confirmClearChat = () => {
+    setShowClearChatConfirm(true)
+  }
+
+  const cancelClearChat = () => {
+    setShowClearChatConfirm(false)
+  }
+
+  const clearChat = async () => {
+    try {
+      if (chatMode === 'team') {
+        // Clear team messages (local view only for regular users)
+        setMessages([])
+        localStorage.removeItem('team_messages')
+        setUnreadCount(0)
+        setUnreadMessageCount(0)
+
+        toast({
+          title: "Team chat cleared",
+          description: "Team chat history has been cleared from your view"
+        })
+      } else if (selectedUser) {
+        // Clear individual conversation
+        setIndividualMessages(prev => ({
+          ...prev,
+          [selectedUser.id]: []
+        }))
+
+        // Clear from cache
+        const cachedKey = `individual_messages_${selectedUser.id}`
+        localStorage.removeItem(cachedKey)
+
+        // Clear unread count for this user
+        setIndividualUnreadCounts(prev => {
+          const updated = { ...prev, [selectedUser.id]: 0 }
+          localStorage.setItem('individual_unread_counts', JSON.stringify(updated))
+          return updated
+        })
+
+        toast({
+          title: "Conversation cleared",
+          description: `Conversation with ${selectedUser.name} has been cleared from your view`
+        })
+      }
+
+      setShowClearChatConfirm(false)
+    } catch (error) {
+      console.error('Error clearing chat:', error)
+      toast({
+        title: "Error",
+        description: "Failed to clear chat. Please try again.",
+        variant: "destructive"
+      })
     }
   }
 
@@ -1242,6 +1534,16 @@ function TeamInboxContent() {
             <Bell className="w-4 h-4 mr-2" />
             Mark all read
           </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={confirmClearChat}
+            className="text-destructive hover:text-destructive"
+          >
+            <Eraser className="w-4 h-4 mr-2" />
+            Clear Chat
+          </Button>
         </div>
       </div>
 
@@ -1401,7 +1703,7 @@ function TeamInboxContent() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className={`flex items-start space-x-3 ${
+                  className={`group flex items-start space-x-3 ${
                     message.sender_id === user?.id ? 'flex-row-reverse space-x-reverse' : ''
                   }`}
                 >
@@ -1421,24 +1723,78 @@ function TeamInboxContent() {
                       <span className="text-xs text-subtle">
                         {formatTime(message.created_at)}
                       </span>
+                      {(message as any).is_edited && (
+                        <span className="text-xs text-muted-foreground italic">edited</span>
+                      )}
                       {!message.is_read && message.sender_id !== user?.id && (
                         <div className="w-2 h-2 bg-primary rounded-full"></div>
                       )}
                     </div>
 
-                    <div
-                      className={`p-3 rounded-lg ${
-                        message.sender_id === user?.id
-                          ? 'bg-primary text-primary-foreground ml-auto'
-                          : 'bg-muted'
-                      }`}
-                      onClick={() => {
-                        if (!message.is_read && message.sender_id !== user?.id) {
-                          markAsRead(message.id)
-                        }
-                      }}
-                    >
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <div className="relative">
+                      {editingMessage?.id === message.id ? (
+                        // Edit mode
+                        <div className="space-y-2">
+                          <Textarea
+                            value={editingMessage.content}
+                            onChange={(e) => setEditingMessage(prev => prev ? { ...prev, content: e.target.value } : null)}
+                            className="min-h-[60px] resize-none"
+                            placeholder="Edit your message..."
+                          />
+                          <div className="flex space-x-2">
+                            <Button size="sm" onClick={saveEditMessage}>
+                              Save
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={cancelEditMessage}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        // Normal message display
+                        <div
+                          className={`p-3 rounded-lg relative ${
+                            message.sender_id === user?.id
+                              ? 'bg-primary text-primary-foreground ml-auto'
+                              : 'bg-muted'
+                          }`}
+                          onClick={() => {
+                            if (!message.is_read && message.sender_id !== user?.id) {
+                              markAsRead(message.id)
+                            }
+                          }}
+                        >
+                          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+
+                          {/* Message Actions - Only show for own messages */}
+                          {message.sender_id === user?.id && (
+                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                    <MoreVertical className="h-3 w-3" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => startEditMessage(message.id, message.content, chatMode === 'team')}
+                                  >
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => confirmDeleteMessage(message.id, chatMode === 'team')}
+                                    className="text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -1494,6 +1850,47 @@ function TeamInboxContent() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Message Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm.show} onOpenChange={(open: boolean) => !open && cancelDeleteMessage()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Message</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this message? This action cannot be undone and the message will be removed for all users.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelDeleteMessage}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteMessage} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Clear Chat Confirmation Dialog */}
+      <AlertDialog open={showClearChatConfirm} onOpenChange={(open: boolean) => !open && cancelClearChat()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear Chat</AlertDialogTitle>
+            <AlertDialogDescription>
+              {chatMode === 'team'
+                ? "Are you sure you want to clear the team chat? This will remove all messages from your view only."
+                : selectedUser
+                  ? `Are you sure you want to clear your conversation with ${selectedUser.name}? This will remove all messages from your view only.`
+                  : "Are you sure you want to clear this conversation?"
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelClearChat}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={clearChat} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Clear Chat
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
