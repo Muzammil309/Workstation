@@ -53,7 +53,7 @@ interface User {
 }
 
 function TeamInboxContent() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const { users: cachedUsers } = useUsers()
 
   const { toast } = useToast()
@@ -1387,7 +1387,20 @@ function TeamInboxContent() {
   }
 
   // ✅ Conditional return AFTER all hooks are declared
-  if (!user) {
+  // Show loading spinner while authentication is being checked
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-muted-foreground text-sm">Loading team inbox...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login prompt only if authentication check is complete and user is not logged in
+  if (!user && !authLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <p className="text-muted-foreground">Please log in to access the team inbox.</p>
@@ -1395,10 +1408,14 @@ function TeamInboxContent() {
     )
   }
 
+  // Show content loading spinner while data is being fetched
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-muted-foreground text-sm">Loading messages...</p>
+        </div>
       </div>
     )
   }
@@ -1714,7 +1731,7 @@ function TeamInboxContent() {
                   </Avatar>
 
                   <div className={`flex-1 max-w-xs lg:max-w-md ${
-                    message.sender_id === user.id ? 'text-right' : ''
+                    message.sender_id === user?.id ? 'text-right' : ''
                   }`}>
                     <div className="flex items-center space-x-2 mb-1">
                       <span className="text-sm font-medium text-emphasis">

@@ -16,7 +16,39 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
+  // Helper function to cache user data
+  const cacheUserData = (userData: User | null) => {
+    try {
+      if (userData) {
+        localStorage.setItem('cached_user', JSON.stringify(userData))
+      } else {
+        localStorage.removeItem('cached_user')
+      }
+    } catch (error) {
+      console.warn('Failed to cache user data:', error)
+    }
+  }
+
+  // Helper function to get cached user data
+  const getCachedUserData = (): User | null => {
+    try {
+      const cached = localStorage.getItem('cached_user')
+      return cached ? JSON.parse(cached) : null
+    } catch (error) {
+      console.warn('Failed to get cached user data:', error)
+      return null
+    }
+  }
+
   useEffect(() => {
+    // Load cached user data immediately for faster initial render
+    const cachedUser = getCachedUserData()
+    if (cachedUser) {
+      console.log('🔍 useAuth: Using cached user data for faster initial load:', cachedUser.email)
+      setUser(cachedUser)
+      // Still need to verify the session is valid, but user sees content immediately
+    }
+
     // Simplified auth check
     const checkAuth = async () => {
       try {
@@ -52,6 +84,7 @@ export function useAuth() {
               }
               console.log('✅ useAuth: Setting user from users table:', formattedUser)
               setUser(formattedUser)
+              cacheUserData(formattedUser)
             } else {
               // Fallback: create user object from session data
               console.log('⚠️ useAuth: No user in users table, using session data')
@@ -65,6 +98,7 @@ export function useAuth() {
               }
               console.log('✅ useAuth: Setting fallback user:', fallbackUser)
               setUser(fallbackUser)
+              cacheUserData(fallbackUser)
             }
           } catch (userError) {
             console.error('❌ useAuth: Error getting user from users table:', userError)
@@ -79,25 +113,28 @@ export function useAuth() {
             }
             console.log('✅ useAuth: Setting fallback user after error:', fallbackUser)
             setUser(fallbackUser)
+            cacheUserData(fallbackUser)
           }
         } else {
           console.log('🔍 useAuth: No valid session found')
           setUser(null)
+          cacheUserData(null)
         }
       } catch (error) {
         console.error('❌ useAuth: Auth check failed:', error)
         setUser(null)
+        cacheUserData(null)
       } finally {
         console.log('🔍 useAuth: Setting isLoading to false')
         setIsLoading(false)
       }
     }
 
-    // Add a timeout to prevent infinite loading
+    // Add a timeout to prevent infinite loading (reduced from 5s to 3s for better UX)
     const timeoutId = setTimeout(() => {
       console.log('⚠️ useAuth: Timeout reached, forcing isLoading to false')
       setIsLoading(false)
-    }, 5000) // 5 second timeout
+    }, 3000) // 3 second timeout
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -119,11 +156,13 @@ export function useAuth() {
 
           console.log('✅ useAuth: Setting user from SIGNED_IN event:', fallbackUser)
           setUser(fallbackUser)
+          cacheUserData(fallbackUser)
           setIsLoading(false)
 
         } else if (event === 'SIGNED_OUT') {
           console.log('🔍 useAuth: SIGNED_OUT event, clearing user')
           setUser(null)
+          cacheUserData(null)
           setIsLoading(false)
         }
       }
@@ -215,6 +254,7 @@ export function useAuth() {
   const logout = async () => {
     await supabase.auth.signOut()
     setUser(null)
+    cacheUserData(null)
   }
 
   // Debug function to check authentication state
