@@ -54,6 +54,8 @@ function TeamInboxContent() {
   const [chatMode, setChatMode] = useState<'team' | 'individual'>('team')
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [individualMessages, setIndividualMessages] = useState<Record<string, Message[]>>({})
+  const [showDiagnostics, setShowDiagnostics] = useState(false)
+  const [diagnosticResults, setDiagnosticResults] = useState<string[]>([])
   const isMountedRef = useRef(true)
 
   // ✅ Load messages from cache immediately on mount
@@ -84,9 +86,17 @@ function TeamInboxContent() {
 
   // ✅ ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id) {
+      console.warn('⚠️  TeamInbox: No user ID available, skipping initialization')
+      return
+    }
 
     console.log('🔄 TeamInbox: Initializing for user:', user.id)
+    console.log('🔄 User details:', { id: user.id, email: user.email, name: user.name })
+
+    // Test database connectivity first
+    testDatabaseConnectivity()
+
     loadMessages()
     loadUsers()
 
@@ -284,6 +294,139 @@ function TeamInboxContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const addDiagnosticResult = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString()
+    const logMessage = `${timestamp}: ${message}`
+    setDiagnosticResults(prev => [...prev, logMessage])
+    console.log(`🔍 Diagnostic: ${message}`)
+  }
+
+  const testDatabaseConnectivity = async () => {
+    console.log('🔍 Testing database connectivity...')
+    addDiagnosticResult('Testing database connectivity...')
+
+    try {
+      // Test basic connection
+      const { data, error } = await supabase.from('team_messages').select('count')
+      if (error) {
+        console.error('❌ Database connectivity test failed:', error)
+        console.error('   Error code:', error.code)
+        console.error('   Error message:', error.message)
+        console.error('   Error details:', error.details)
+        addDiagnosticResult(`❌ Database connectivity failed: ${error.message}`)
+        return false
+      }
+      console.log('✅ Database connectivity test passed')
+      addDiagnosticResult('✅ Database connectivity test passed')
+
+      // Test authentication
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+      if (authError) {
+        console.error('❌ Authentication test failed:', authError)
+        addDiagnosticResult(`❌ Authentication test failed: ${authError.message}`)
+        return false
+      }
+      if (!authUser) {
+        console.warn('⚠️  No authenticated user found - this will cause database writes to fail')
+        addDiagnosticResult('❌ No authenticated user found - this will cause database writes to fail')
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to send messages",
+          variant: "destructive"
+        })
+        return false
+      }
+      console.log('✅ Authentication test passed for user:', authUser.email)
+      addDiagnosticResult(`✅ Authentication test passed for user: ${authUser.email}`)
+
+      return true
+    } catch (err) {
+      console.error('❌ Database connectivity test error:', err)
+      addDiagnosticResult(`❌ Database connectivity test error: ${err}`)
+      return false
+    }
+  }
+
+  const runComprehensiveDiagnostics = async () => {
+    setDiagnosticResults([])
+    addDiagnosticResult('🔍 Starting comprehensive diagnostics...')
+
+    // Test 1: Database connectivity and authentication
+    const connectivityOk = await testDatabaseConnectivity()
+
+    // Test 2: Test team message insertion
+    if (connectivityOk && user?.id) {
+      try {
+        addDiagnosticResult('📤 Testing team message insertion...')
+        const testMessage = {
+          content: `Diagnostic test message from ${user.email} at ${new Date().toLocaleTimeString()}`,
+          sender_id: user.id,
+          sender_name: user.name || user.email || 'Test User',
+          sender_email: user.email || '',
+          message_type: 'text' as const,
+          is_read: false
+        }
+
+        const { data, error } = await supabase
+          .from('team_messages')
+          .insert([testMessage])
+          .select()
+
+        if (error) {
+          addDiagnosticResult(`❌ Team message insert failed: ${error.message}`)
+          if (error.code === '42501') {
+            addDiagnosticResult('🔒 This is an RLS policy violation - check your policies')
+          }
+        } else {
+          addDiagnosticResult('✅ Team message insert successful')
+          // Clean up test message
+          await supabase.from('team_messages').delete().eq('id', data[0].id)
+          addDiagnosticResult('🧹 Cleaned up test message')
+        }
+      } catch (err) {
+        addDiagnosticResult(`❌ Team message test error: ${err}`)
+      }
+    }
+
+    // Test 3: Test individual message insertion
+    if (connectivityOk && user?.id) {
+      try {
+        addDiagnosticResult('📤 Testing individual message insertion...')
+        const testDM = {
+          content: `Diagnostic test DM from ${user.email} at ${new Date().toLocaleTimeString()}`,
+          sender_id: user.id,
+          sender_name: user.name || user.email || 'Test User',
+          recipient_id: user.id, // Send to self for testing
+          recipient_name: user.name || user.email || 'Test User'
+        }
+
+        const { data, error } = await supabase
+          .from('individual_messages')
+          .insert([testDM])
+          .select()
+
+        if (error) {
+          addDiagnosticResult(`❌ Individual message insert failed: ${error.message}`)
+          if (error.code === '42501') {
+            addDiagnosticResult('🔒 This is an RLS policy violation - check your policies')
+          }
+        } else {
+          addDiagnosticResult('✅ Individual message insert successful')
+          // Clean up test message
+          await supabase.from('individual_messages').delete().eq('id', data[0].id)
+          addDiagnosticResult('🧹 Cleaned up test DM')
+        }
+      } catch (err) {
+        addDiagnosticResult(`❌ Individual message test error: ${err}`)
+      }
+    }
+
+    // Test 4: Real-time subscription status
+    addDiagnosticResult(`📡 Team messages subscription: ${isConnected ? 'CONNECTED' : 'DISCONNECTED'}`)
+
+    addDiagnosticResult('🏁 Diagnostics complete')
+  }
+
   const loadMessages = async () => {
     try {
       setIsLoading(true)
@@ -295,7 +438,18 @@ function TeamInboxContent() {
         .order('created_at', { ascending: true })
 
       if (error) {
-        console.log('⚠️ Database query failed:', error)
+        console.error('❌ Database query failed:', error)
+        console.error('   Error code:', error.code)
+        console.error('   Error message:', error.message)
+        console.error('   Error details:', error.details)
+        console.error('   Error hint:', error.hint)
+
+        toast({
+          title: "Database Error",
+          description: `Failed to load messages: ${error.message}`,
+          variant: "destructive"
+        })
+
         // Try to load from localStorage as fallback
         const cachedMessages = localStorage.getItem('team_messages')
         if (cachedMessages) {
@@ -407,22 +561,39 @@ function TeamInboxContent() {
   }
 
   const sendIndividualMessage = async () => {
-    if (!newMessage.trim() || !selectedUser) return
+    if (!newMessage.trim() || !selectedUser) {
+      console.warn('⚠️  Cannot send individual message: missing content or recipient')
+      return
+    }
 
     console.log('📤 Attempting to send individual message to:', selectedUser.name)
+
+    // Pre-flight checks
+    if (!user?.id) {
+      console.error('❌ Cannot send individual message: No authenticated user')
+      toast({
+        title: "Authentication Error",
+        description: "Please log in to send messages",
+        variant: "destructive"
+      })
+      return
+    }
 
     try {
       const messageData = {
         content: newMessage.trim(),
-        sender_id: user?.id,
-        sender_name: user?.name || user?.email || 'Unknown',
+        sender_id: user.id,
+        sender_name: user.name || user.email || 'Unknown',
         recipient_id: selectedUser.id,
         recipient_name: selectedUser.name,
         created_at: new Date().toISOString()
       }
 
       console.log('📤 Individual message data:', messageData)
+      console.log('📤 Sender context:', { id: user.id, email: user.email, name: user.name })
+      console.log('📤 Recipient context:', { id: selectedUser.id, name: selectedUser.name })
 
+      console.log('📤 Attempting individual message database insert...')
       const { data, error } = await supabase
         .from('individual_messages')
         .insert([messageData])
@@ -430,7 +601,16 @@ function TeamInboxContent() {
         .single()
 
       if (error) {
-        console.error('❌ Database error:', error)
+        console.error('❌ Individual message database error:', error)
+        console.error('   Error code:', error.code)
+        console.error('   Error message:', error.message)
+        console.error('   Error details:', error.details)
+        console.error('   Error hint:', error.hint)
+
+        if (error.code === '42501') {
+          console.error('   🔒 This is an RLS policy violation - user lacks INSERT permission for individual_messages')
+        }
+
         throw error
       }
 
@@ -504,21 +684,34 @@ function TeamInboxContent() {
 
     console.log('📤 Attempting to send team message:', newMessage.trim())
 
+    // Pre-flight checks
+    if (!user?.id) {
+      console.error('❌ Cannot send message: No authenticated user')
+      toast({
+        title: "Authentication Error",
+        description: "Please log in to send messages",
+        variant: "destructive"
+      })
+      return
+    }
+
     try {
       const messageData = {
         content: newMessage.trim(),
-        sender_id: user?.id || '',
-        sender_name: user?.name || user?.email || 'Unknown',
-        sender_email: user?.email || '',
+        sender_id: user.id,
+        sender_name: user.name || user.email || 'Unknown',
+        sender_email: user.email || '',
         message_type: 'text' as const,
         is_read: false,
         created_at: new Date().toISOString()
       }
 
-      console.log('📤 Message data:', messageData)
+      console.log('📤 Team message data:', messageData)
+      console.log('📤 Current user context:', { id: user.id, email: user.email, name: user.name })
 
       // Try to insert into database
       try {
+        console.log('📤 Attempting database insert...')
         const { data, error } = await supabase
           .from('team_messages')
           .insert([messageData])
@@ -526,7 +719,16 @@ function TeamInboxContent() {
           .single()
 
         if (error) {
-          console.error('Database insert error:', error)
+          console.error('❌ Database insert error:', error)
+          console.error('   Error code:', error.code)
+          console.error('   Error message:', error.message)
+          console.error('   Error details:', error.details)
+          console.error('   Error hint:', error.hint)
+
+          if (error.code === '42501') {
+            console.error('   🔒 This is an RLS policy violation - user lacks INSERT permission')
+          }
+
           throw error
         }
 
@@ -714,6 +916,16 @@ function TeamInboxContent() {
             </Badge>
           )}
 
+          {/* Diagnostic Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDiagnostics(!showDiagnostics)}
+            className="text-xs"
+          >
+            🔍 Debug
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -754,6 +966,94 @@ function TeamInboxContent() {
                   </div>
                 </Button>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Diagnostic Panel */}
+      {showDiagnostics && (
+        <Card className="surface-3 border-yellow-200 bg-yellow-50">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-yellow-800">🔍 Messaging Diagnostics</h3>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={runComprehensiveDiagnostics}
+                  className="text-xs"
+                >
+                  Run Tests
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDiagnosticResults([])}
+                  className="text-xs"
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+            <div className="bg-white rounded border p-3 max-h-40 overflow-y-auto text-sm">
+              {diagnosticResults.length === 0 ? (
+                <p className="text-gray-500">Click "Run Tests" to diagnose messaging issues</p>
+              ) : (
+                diagnosticResults.map((result, index) => (
+                  <div key={index} className="mb-1 font-mono text-xs">
+                    {result}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="mt-2 text-xs text-yellow-700">
+              <strong>Status:</strong> Auth: {user ? '✅' : '❌'} | DB: {isConnected ? '✅' : '❌'} |
+              User ID: {user?.id ? '✅' : '❌'}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Diagnostic Panel */}
+      {showDiagnostics && (
+        <Card className="surface-3 border-yellow-200 bg-yellow-50">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-yellow-800">🔍 Messaging Diagnostics</h3>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={runComprehensiveDiagnostics}
+                  className="text-xs"
+                >
+                  Run Tests
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDiagnosticResults([])}
+                  className="text-xs"
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+            <div className="bg-white rounded border p-3 max-h-40 overflow-y-auto text-sm">
+              {diagnosticResults.length === 0 ? (
+                <p className="text-gray-500">Click "Run Tests" to diagnose messaging issues</p>
+              ) : (
+                diagnosticResults.map((result, index) => (
+                  <div key={index} className="mb-1 font-mono text-xs">
+                    {result}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="mt-2 text-xs text-yellow-700">
+              <strong>Status:</strong> Auth: {user ? '✅' : '❌'} | DB: {isConnected ? '✅' : '❌'} |
+              User ID: {user?.id ? '✅' : '❌'}
             </div>
           </CardContent>
         </Card>
