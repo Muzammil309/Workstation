@@ -48,6 +48,9 @@ export interface TriggerConditions {
   assignee_ids?: string[]
   project_ids?: string[]
   tags?: string[]
+  alert_frequency_hours?: number // New: customizable alert frequency
+  target_scope?: 'assigned_tasks' | 'created_tasks' | 'both' // New: user targeting scope
+  only_primary_assignee?: boolean // New: only alert primary assignee
 }
 
 class AutomationEngine {
@@ -181,17 +184,22 @@ class AutomationEngine {
       for (const task of tasks || []) {
         // Check if this task matches the rule conditions
         if (this.taskMatchesConditions(task, conditions)) {
-          // Check if we've already notified about this task recently
-          const shouldExecute = await this.shouldExecuteForTask(rule.id, task.id)
+          // Get all relevant users for this task based on targeting scope
+          const targetUsers = this.getTargetUsersForTask(task, rule, conditions)
 
-          if (shouldExecute) {
-            await this.executeActions(rule, {
-              trigger_data: { task, deadline: task.deadline },
-              user_id: task.assignee_id || task.created_by,
-              timestamp: now.toISOString(),
-              task_id: task.id,
-              task_data: task
-            })
+          for (const userId of targetUsers) {
+            // Check if we've already notified this user about this task recently
+            const shouldExecute = await this.shouldExecuteForTaskAndUser(rule.id, task.id, userId, conditions)
+
+            if (shouldExecute) {
+              await this.executeActions(rule, {
+                trigger_data: { task, deadline: task.deadline },
+                user_id: userId,
+                timestamp: now.toISOString(),
+                task_id: task.id,
+                task_data: task
+              })
+            }
           }
         }
       }
@@ -217,16 +225,22 @@ class AutomationEngine {
 
       for (const task of tasks || []) {
         if (this.taskMatchesConditions(task, conditions)) {
-          const shouldExecute = await this.shouldExecuteForTask(rule.id, task.id)
+          // Get all relevant users for this task based on targeting scope
+          const targetUsers = this.getTargetUsersForTask(task, rule, conditions)
 
-          if (shouldExecute) {
-            await this.executeActions(rule, {
-              trigger_data: { task, overdue_hours: Math.floor((now.getTime() - new Date(task.deadline).getTime()) / (1000 * 60 * 60)) },
-              user_id: task.assignee_id || task.created_by,
-              timestamp: now.toISOString(),
-              task_id: task.id,
-              task_data: task
-            })
+          for (const userId of targetUsers) {
+            // Check if we've already notified this user about this overdue task recently
+            const shouldExecute = await this.shouldExecuteForTaskAndUser(rule.id, task.id, userId, conditions)
+
+            if (shouldExecute) {
+              await this.executeActions(rule, {
+                trigger_data: { task, overdue_hours: Math.floor((now.getTime() - new Date(task.deadline).getTime()) / (1000 * 60 * 60)) },
+                user_id: userId,
+                timestamp: now.toISOString(),
+                task_id: task.id,
+                task_data: task
+              })
+            }
           }
         }
       }
@@ -267,17 +281,20 @@ class AutomationEngine {
     return true
   }
 
-  async shouldExecuteForTask(ruleId: string, taskId: string): Promise<boolean> {
+  // Enhanced method that considers both task and user for frequency control
+  async shouldExecuteForTaskAndUser(ruleId: string, taskId: string, userId: string, conditions: TriggerConditions): Promise<boolean> {
     try {
-      // Check if we've executed this rule for this task in the last hour
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+      // Get custom alert frequency or default to 1 hour
+      const alertFrequencyHours = conditions.alert_frequency_hours || 1
+      const frequencyAgo = new Date(Date.now() - (alertFrequencyHours * 60 * 60 * 1000))
 
       const { data, error } = await supabase
         .from('automation_executions')
         .select('*')
         .eq('rule_id', ruleId)
         .eq('task_id', taskId)
-        .gte('executed_at', oneHourAgo.toISOString())
+        .eq('user_id', userId)
+        .gte('executed_at', frequencyAgo.toISOString())
         .limit(1)
 
       if (error) {
@@ -285,11 +302,77 @@ class AutomationEngine {
         return true // Default to allowing execution
       }
 
-      return !data || data.length === 0
+      const shouldExecute = !data || data.length === 0
+
+      if (!shouldExecute) {
+        console.log(`⏰ Skipping notification for user ${userId} on task ${taskId} - within ${alertFrequencyHours}h cooldown period`)
+      }
+
+      return shouldExecute
     } catch (error) {
       console.error('Error checking execution history:', error)
       return true
     }
+  }
+
+  // Legacy method for backward compatibility
+  async shouldExecuteForTask(ruleId: string, taskId: string): Promise<boolean> {
+    return this.shouldExecuteForTaskAndUser(ruleId, taskId, '', { alert_frequency_hours: 1 })
+  }
+
+  // Get target users for a task based on rule conditions and targeting scope
+  getTargetUsersForTask(task: any, rule: AutomationRule, conditions: TriggerConditions): string[] {
+    const targetUsers: Set<string> = new Set()
+    const targetScope = conditions.target_scope || 'assigned_tasks'
+    const onlyPrimaryAssignee = conditions.only_primary_assignee || false
+
+    console.log(`🎯 Determining target users for task ${task.id} with scope: ${targetScope}`)
+
+    // Handle assigned tasks
+    if (targetScope === 'assigned_tasks' || targetScope === 'both') {
+      if (onlyPrimaryAssignee && task.assignee_id) {
+        // Only notify primary assignee
+        targetUsers.add(task.assignee_id)
+        console.log(`👤 Added primary assignee: ${task.assignee_id}`)
+      } else if (task.assignees && Array.isArray(task.assignees)) {
+        // Notify all assignees
+        task.assignees.forEach((assigneeId: string) => {
+          if (assigneeId) {
+            targetUsers.add(assigneeId)
+            console.log(`👥 Added assignee: ${assigneeId}`)
+          }
+        })
+      } else if (task.assignee_id) {
+        // Fallback to single assignee field
+        targetUsers.add(task.assignee_id)
+        console.log(`👤 Added fallback assignee: ${task.assignee_id}`)
+      }
+    }
+
+    // Handle created tasks
+    if (targetScope === 'created_tasks' || targetScope === 'both') {
+      if (task.created_by) {
+        targetUsers.add(task.created_by)
+        console.log(`✏️ Added task creator: ${task.created_by}`)
+      }
+    }
+
+    // Filter by rule creator if this is a personal rule
+    if (rule.created_by && targetUsers.size > 0) {
+      // Only send to rule creator if they are involved with the task
+      if (targetUsers.has(rule.created_by)) {
+        console.log(`🔒 Personal rule - filtering to rule creator only: ${rule.created_by}`)
+        return [rule.created_by]
+      } else {
+        console.log(`🚫 Personal rule - rule creator not involved with task, skipping`)
+        return []
+      }
+    }
+
+    const result = Array.from(targetUsers).filter(userId => userId && userId.trim() !== '')
+    console.log(`✅ Final target users for task ${task.id}:`, result)
+
+    return result
   }
 
   async executeActions(rule: AutomationRule, context: AutomationContext) {
@@ -413,9 +496,12 @@ class AutomationEngine {
         .insert({
           rule_id: ruleId,
           task_id: context.task_id,
+          user_id: context.user_id,
           executed_at: new Date().toISOString(),
           context: context
         })
+
+      console.log(`📝 Recorded execution for rule ${ruleId}, task ${context.task_id}, user ${context.user_id}`)
     } catch (error) {
       console.error('Error recording execution:', error)
     }

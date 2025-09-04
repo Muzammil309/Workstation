@@ -103,7 +103,10 @@ function AutomationCenterContent() {
       hours_before_deadline: 24,
       priority_levels: [] as string[],
       task_status: ['pending', 'in-progress'] as string[],
-      assignee_ids: [] as string[]
+      assignee_ids: [] as string[],
+      alert_frequency_hours: 1,
+      target_scope: 'assigned_tasks' as 'assigned_tasks' | 'created_tasks' | 'both',
+      only_primary_assignee: false
     },
     actions: [{
       type: 'send_notification' as const,
@@ -380,7 +383,10 @@ function AutomationCenterContent() {
           hours_before_deadline: 24,
           priority_levels: [],
           task_status: ['pending', 'in-progress'],
-          assignee_ids: []
+          assignee_ids: [],
+          alert_frequency_hours: 1,
+          target_scope: 'assigned_tasks' as 'assigned_tasks' | 'created_tasks' | 'both',
+          only_primary_assignee: false
         },
         actions: [{
           type: 'send_notification',
@@ -1074,6 +1080,81 @@ function AutomationCenterContent() {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* Alert Frequency Settings */}
+                <div>
+                  <Label htmlFor="alert-frequency">Alert Frequency</Label>
+                  <Select
+                    value={newRuleData.trigger_conditions.alert_frequency_hours?.toString() || '1'}
+                    onValueChange={(value) => setNewRuleData(prev => ({
+                      ...prev,
+                      trigger_conditions: {
+                        ...prev.trigger_conditions,
+                        alert_frequency_hours: parseInt(value)
+                      }
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Every 1 hour</SelectItem>
+                      <SelectItem value="3">Every 3 hours</SelectItem>
+                      <SelectItem value="6">Every 6 hours</SelectItem>
+                      <SelectItem value="12">Every 12 hours</SelectItem>
+                      <SelectItem value="24">Every 24 hours</SelectItem>
+                      <SelectItem value="48">Every 48 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    How often to send alerts for the same task
+                  </p>
+                </div>
+
+                {/* Target Scope Settings */}
+                <div>
+                  <Label htmlFor="target-scope">Alert Target</Label>
+                  <Select
+                    value={newRuleData.trigger_conditions.target_scope || 'assigned_tasks'}
+                    onValueChange={(value: 'assigned_tasks' | 'created_tasks' | 'both') => setNewRuleData(prev => ({
+                      ...prev,
+                      trigger_conditions: {
+                        ...prev.trigger_conditions,
+                        target_scope: value
+                      }
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select target" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="assigned_tasks">Tasks assigned to me</SelectItem>
+                      <SelectItem value="created_tasks">Tasks I created</SelectItem>
+                      <SelectItem value="both">Both assigned and created tasks</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Which tasks should trigger alerts for you
+                  </p>
+                </div>
+
+                {/* Primary Assignee Only Option */}
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    checked={newRuleData.trigger_conditions.only_primary_assignee || false}
+                    onCheckedChange={(checked) => setNewRuleData(prev => ({
+                      ...prev,
+                      trigger_conditions: {
+                        ...prev.trigger_conditions,
+                        only_primary_assignee: !!checked
+                      }
+                    }))}
+                  />
+                  <Label className="text-sm">Only alert primary assignee</Label>
+                  <p className="text-xs text-muted-foreground">
+                    If enabled, only the primary assignee will receive alerts
+                  </p>
                 </div>
               </div>
             </div>
