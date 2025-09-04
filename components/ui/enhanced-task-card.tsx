@@ -32,7 +32,7 @@ interface Task {
   title: string
   description?: string
   status: 'pending' | 'in-progress' | 'completed'
-  priority: 'low' | 'medium' | 'high'
+  priority: 'low' | 'medium' | 'high' | 'urgent'
   deadline?: string
   progress: number
   assignees?: Array<{
@@ -69,6 +69,11 @@ const priorityConfig = {
     color: 'bg-red-500/20 text-red-400 border-red-500/30',
     icon: '🔴',
     gradient: 'from-red-500/20 to-pink-500/20'
+  },
+  urgent: {
+    color: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    icon: '🚨',
+    gradient: 'from-purple-500/20 to-red-500/20'
   }
 }
 

@@ -11,9 +11,9 @@ interface FuturisticCardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const FuturisticCard = React.forwardRef<HTMLDivElement, FuturisticCardProps>(
-  ({ className, variant = 'default', hover = true, children, ...props }, ref) => {
+  ({ className, variant = 'default', hover = true, children, onClick, ...props }, ref) => {
     const baseClasses = "relative overflow-hidden transition-all duration-300"
-    
+
     const variantClasses = {
       default: "bg-card border border-border rounded-xl shadow-lg",
       glass: "glass-effect rounded-xl",
@@ -35,7 +35,7 @@ const FuturisticCard = React.forwardRef<HTMLDivElement, FuturisticCardProps>(
           hoverClasses,
           className
         )}
-        {...props}
+        onClick={onClick}
       >
         {/* Animated background gradient for glass effect */}
         {variant === 'glass' && (
